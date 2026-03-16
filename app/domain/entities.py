@@ -54,6 +54,8 @@ class ModelInputConfig:
     color_format: str
     normalize: bool
     scale: float
+    mean: List[float]
+    std: List[float]
 
 
 @dataclass

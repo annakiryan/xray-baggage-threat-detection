@@ -5,5 +5,6 @@
   "default_video_dir": "data",
   "default_confidence_threshold": 0.4,
   "default_iou_threshold": 0.5,
-  "default_frame_skip": 1
+  "default_frame_skip": 1,
+  "device": "cpu"
 }
