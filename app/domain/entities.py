@@ -7,6 +7,7 @@ class Detection:
     """
     Одна детекция на кадре
     """
+
     class_id: int
     class_name: str
     confidence: float
@@ -18,6 +19,7 @@ class FrameResult:
     """
     Результат обработки одного кадра
     """
+
     frame: Any
     detections: List[Detection] = field(default_factory=list)
     inference_time_ms: float = 0.0
@@ -29,6 +31,7 @@ class AppConfig:
     """
     Общий конфиг приложения
     """
+
     app_name: str
     logs_dir: str
     models_dir: str
@@ -43,6 +46,7 @@ class ModelInputConfig:
     """
     Параметры входа модели
     """
+
     width: int
     height: int
     channels: int
@@ -57,6 +61,7 @@ class ModelOutputConfig:
     """
     Параметры выхода модели
     """
+
     output_names: List[str]
     format: str
 
@@ -66,6 +71,7 @@ class ModelPostprocessConfig:
     """
     Параметры постобработки
     """
+
     max_detections: int
     confidence_threshold: float
     iou_threshold: float
@@ -76,6 +82,7 @@ class ModelConfig:
     """
     Полный конфиг ONNX-модели
     """
+
     model_name: str
     task_type: str
     model_path: str
@@ -90,6 +97,7 @@ class RawPrediction:
     """
     Сырой выход модели после ONNX Runtime
     """
+
     outputs: List[Any]
 
 
@@ -98,6 +106,7 @@ class ModelInfo:
     """
     Краткая информация о загруженной модели
     """
+
     model_name: str
     model_path: str
     input_name: str
