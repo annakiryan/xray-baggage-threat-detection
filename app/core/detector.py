@@ -9,6 +9,10 @@ from app.domain.entities import ModelConfig
 
 
 class OnnxDetector:
+    """
+    ONNX-детектор с preprocess через letterbox.
+    """
+
     def __init__(self, model_config: ModelConfig, device: str = "cpu"):
         self.model_config = model_config
         self.device = device.lower()
@@ -69,41 +73,129 @@ class OnnxDetector:
                     f"но в модели доступны выходы: {real_output_names}"
                 )
 
-    def preprocess(self, frame: np.ndarray) -> np.ndarray:
-        input_cfg = self.model_config.input
+    @staticmethod
+    def _letterbox(
+        image: np.ndarray,
+        new_shape: tuple[int, int],
+        color: tuple[int, int, int] = (114, 114, 114),
+    ) -> tuple[np.ndarray, float, float, float]:
+        """
+        Resize с сохранением пропорций + padding.
 
-        resized = cv2.resize(frame, (input_cfg.width, input_cfg.height))
+        Returns
+        -------
+        padded_image, scale, pad_left, pad_top
+        """
+        orig_h, orig_w = image.shape[:2]
+        new_w, new_h = new_shape
+
+        scale = min(new_w / orig_w, new_h / orig_h)
+
+        resized_w = int(round(orig_w * scale))
+        resized_h = int(round(orig_h * scale))
+
+        resized = cv2.resize(
+            image, (resized_w, resized_h), interpolation=cv2.INTER_LINEAR
+        )
+
+        pad_w = new_w - resized_w
+        pad_h = new_h - resized_h
+
+        pad_left = pad_w / 2
+        pad_right = pad_w - pad_left
+        pad_top = pad_h / 2
+        pad_bottom = pad_h - pad_top
+
+        top = int(round(pad_top - 0.1))
+        bottom = int(round(pad_bottom + 0.1))
+        left = int(round(pad_left - 0.1))
+        right = int(round(pad_right + 0.1))
+
+        padded = cv2.copyMakeBorder(
+            resized,
+            top,
+            bottom,
+            left,
+            right,
+            cv2.BORDER_CONSTANT,
+            value=color,
+        )
+
+        return padded, scale, left, top
+
+    def preprocess(self, frame: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
+        """
+        preprocess с letterbox.
+
+        Returns
+        -------
+        input_tensor, meta
+        """
+        if frame is None:
+            raise ValueError("Получен пустой кадр для preprocess")
+
+        input_cfg = self.model_config.input
+        orig_h, orig_w = frame.shape[:2]
+
+        image, scale, pad_left, pad_top = self._letterbox(
+            frame,
+            new_shape=(input_cfg.width, input_cfg.height),
+        )
 
         if input_cfg.color_format.lower() == "rgb":
-            resized = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        elif input_cfg.color_format.lower() == "bgr":
+            pass
+        else:
+            raise ValueError(f"Неподдерживаемый color_format: {input_cfg.color_format}")
 
-        image = resized.astype(np.float32)
+        image = image.astype(np.float32)
 
         if input_cfg.normalize:
             image = image / input_cfg.scale
 
+        # mean/std оставляем универсально
         mean = np.array(input_cfg.mean, dtype=np.float32).reshape(1, 1, 3)
         std = np.array(input_cfg.std, dtype=np.float32).reshape(1, 1, 3)
         image = (image - mean) / std
 
         image = np.transpose(image, (2, 0, 1))
-        image = np.expand_dims(image, axis=0)
+        image = np.expand_dims(image, axis=0).astype(np.float32)
 
-        return image.astype(np.float32)
+        meta = {
+            "orig_width": orig_w,
+            "orig_height": orig_h,
+            "input_width": input_cfg.width,
+            "input_height": input_cfg.height,
+            "scale": scale,
+            "pad_left": pad_left,
+            "pad_top": pad_top,
+        }
+
+        return image, meta
 
     def infer(self, input_tensor: np.ndarray) -> List[np.ndarray]:
+        if self.session is None:
+            raise RuntimeError("ONNX-сессия не инициализирована")
+
         return self.session.run(
             self.output_names,
             {self.input_name: input_tensor},
         )
 
-    def predict_raw(self, frame: np.ndarray) -> List[np.ndarray]:
-        input_tensor = self.preprocess(frame)
-        return self.infer(input_tensor)
+    def predict_raw(self, frame: np.ndarray) -> tuple[List[np.ndarray], dict[str, Any]]:
+        input_tensor, meta = self.preprocess(frame)
+        outputs = self.infer(input_tensor)
+        return outputs, meta
 
     def get_runtime_info(self) -> dict[str, Any]:
+        if self.session is None:
+            raise RuntimeError("ONNX-сессия не инициализирована")
+
         return {
             "device_requested": self.device,
             "available_providers": ort.get_available_providers(),
             "session_providers": self.session.get_providers(),
+            "input_name": self.input_name,
+            "output_names": self.output_names,
         }

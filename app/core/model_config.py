@@ -73,6 +73,8 @@ class ModelConfigService:
         )
 
         postprocess_cfg = ModelPostprocessConfig(
+            confidence_threshold=float(data["postprocess"]["confidence_threshold"]),
+            iou_threshold=float(data["postprocess"]["iou_threshold"]),
             max_detections=int(data["postprocess"]["max_detections"]),
         )
 

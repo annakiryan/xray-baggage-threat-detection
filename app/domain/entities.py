@@ -39,6 +39,7 @@ class AppConfig:
     default_confidence_threshold: float
     default_iou_threshold: float
     default_frame_skip: int
+    device: str
 
 
 @dataclass

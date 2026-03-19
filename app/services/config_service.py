@@ -42,6 +42,7 @@ class ConfigService:
             default_confidence_threshold=float(data["default_confidence_threshold"]),
             default_iou_threshold=float(data["default_iou_threshold"]),
             default_frame_skip=int(data["default_frame_skip"]),
+            device=data["device"],
         )
 
     @staticmethod
