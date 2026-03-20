@@ -13,9 +13,6 @@ class VideoSource:
         self.is_opened: bool = False
 
     def open(self) -> None:
-        """
-        Открывает видеоисточник.
-        """
         if not self.source_path.exists():
             raise FileNotFoundError(f"Видео не найдено: {self.source_path}")
 

@@ -183,7 +183,6 @@ def draw_text_pil(
 
     font = ImageFont.truetype(font_path, font_size)
 
-    # Pillow использует RGB, поэтому переворачиваем цвет
     rgb_text_color = (text_color[2], text_color[1], text_color[0])
     draw.text(position, text, font=font, fill=rgb_text_color)
 

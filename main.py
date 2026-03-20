@@ -3,7 +3,7 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 from app.services.config_service import ConfigService
-from app.core.model_config import ModelConfigService
+from app.services.model_config_service import ModelConfigService
 from app.ui.main_window import MainWindow
 
 

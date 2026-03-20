@@ -9,10 +9,6 @@ from app.domain.entities import ModelConfig
 
 
 class OnnxDetector:
-    """
-    ONNX-детектор с preprocess через letterbox.
-    """
-
     def __init__(self, model_config: ModelConfig, device: str = "cpu"):
         self.model_config = model_config
         self.device = device.lower()
@@ -154,7 +150,6 @@ class OnnxDetector:
         if input_cfg.normalize:
             image = image / input_cfg.scale
 
-        # mean/std оставляем универсально
         mean = np.array(input_cfg.mean, dtype=np.float32).reshape(1, 1, 3)
         std = np.array(input_cfg.std, dtype=np.float32).reshape(1, 1, 3)
         image = (image - mean) / std

@@ -24,7 +24,7 @@ class VideoProcessingWorker(QObject):
     но не управляет внешним устройством и не может остановить ленту интроскопа.
     """
 
-    result_ready = Signal(object)  # FrameResult
+    result_ready = Signal(object)
     status_changed = Signal(str)
     error_occurred = Signal(str)
     finished = Signal()

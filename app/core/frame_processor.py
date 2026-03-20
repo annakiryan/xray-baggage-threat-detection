@@ -50,7 +50,7 @@ class FrameProcessor:
 
     def process_frame(self, frame: np.ndarray) -> FrameResult:
         """
-        Полная обработка одного кадра.
+        Полная обработка одного кадра
         """
         if frame is None:
             raise ValueError("Получен пустой кадр для обработки")
