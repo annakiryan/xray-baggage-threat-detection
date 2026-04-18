@@ -14,9 +14,9 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
-from app.core.worker import VideoProcessingWorker
+from app.processing.worker import VideoProcessingWorker
 from app.domain.entities import FrameResult, ModelConfig
-from app.services.capture_service import CaptureService
+from app.video.capture_service import CaptureService
 from app.ui.styles import MAIN_WINDOW_STYLE
 from app.ui.widgets import (
     SourceGroup,
@@ -68,7 +68,6 @@ class MainWindow(QMainWindow):
         root_layout.setContentsMargins(16, 16, 16, 16)
         root_layout.setSpacing(16)
 
-        # Левая часть
         left_layout = QVBoxLayout()
         self.video_label = QLabel("Видео не загружено")
         self.video_label.setAlignment(Qt.AlignCenter)
@@ -76,7 +75,6 @@ class MainWindow(QMainWindow):
         self.video_label.setObjectName("videoLabel")
         left_layout.addWidget(self.video_label)
 
-        # Правая часть: обязательно через QWidget-контейнер
         right_panel = QWidget()
         right_panel.setFixedWidth(380)
 

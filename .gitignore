@@ -11,4 +11,4 @@ logs/*.log
 *.bak
 .DS_Store
 Thumbs.db
-results
+results/

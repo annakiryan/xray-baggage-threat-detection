@@ -3,8 +3,8 @@
   "logs_dir": "logs",
   "models_dir": "models",
   "default_video_dir": "data",
-  "default_confidence_threshold": 0.5,
-  "default_iou_threshold": 0.5,
+  "default_confidence_threshold": 0.8,
+  "default_iou_threshold": 0.7,
   "default_frame_skip": 1,
   "device": "cpu"
 }

@@ -2,13 +2,13 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from app.services.config_service import ConfigService
-from app.services.model_config_service import ModelConfigService
+from app.config.config_service import ConfigService
+from app.config.model_config_service import ModelConfigService
 from app.ui.main_window import MainWindow
 
 
 APP_CONFIG_PATH = "configs/app_config.json"
-MODEL_CONFIG_PATH = "models/xray_yolo_nano_1/config.json"
+MODEL_CONFIG_PATH = "models/xray_yolo11n/config.json"
 
 
 def main():

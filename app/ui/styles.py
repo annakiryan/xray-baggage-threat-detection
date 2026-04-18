@@ -1,9 +1,16 @@
 MAIN_WINDOW_STYLE = """
-QMainWindow, QWidget {
+QMainWindow {
     background-color: #121417;
     color: #E6EAF0;
     font-size: 14px;
 }
+
+QWidget {
+    color: #E6EAF0;
+    font-size: 14px;
+    background: transparent;
+}
+
 
 QGroupBox {
     background-color: #1A1F26;
@@ -23,6 +30,7 @@ QGroupBox::title {
 
 QLabel {
     color: #E6EAF0;
+    background: transparent;
 }
 
 QLabel#videoLabel {
