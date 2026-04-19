@@ -1,53 +1,40 @@
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional, Any
+from typing import Optional
+
+import numpy as np
 
 
-@dataclass
+@dataclass(frozen=True)
 class Detection:
-    """
-    Одна детекция на кадре
-    """
-
     class_id: int
     class_name: str
     confidence: float
-    bbox: Tuple[int, int, int, int]  # (x1, y1, x2, y2)
+    bbox: tuple[int, int, int, int]
 
 
 @dataclass
 class FrameResult:
-    """
-    Результат обработки одного кадра
-    """
-
-    frame: Any
-    detections: List[Detection] = field(default_factory=list)
+    frame: np.ndarray
+    detections: list[Detection] = field(default_factory=list)
     inference_time_ms: float = 0.0
     fps: float = 0.0
 
 
-@dataclass
+@dataclass(frozen=True)
 class AppConfig:
-    """
-    Общий конфиг приложения
-    """
-
     app_name: str
-    logs_dir: str
     models_dir: str
-    default_video_dir: str
+    default_video: str
+    logs_dir: str
+    results_dir: str
     default_confidence_threshold: float
     default_iou_threshold: float
     default_frame_skip: int
     device: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class ModelInputConfig:
-    """
-    Параметры входа модели
-    """
-
     width: int
     height: int
     channels: int
@@ -55,64 +42,44 @@ class ModelInputConfig:
     color_format: str
     normalize: bool
     scale: float
-    mean: List[float]
-    std: List[float]
+    mean: list[float]
+    std: list[float]
 
 
-@dataclass
+@dataclass(frozen=True)
 class ModelOutputConfig:
-    """
-    Параметры выхода модели
-    """
-
-    output_names: List[str]
+    output_names: list[str]
     format: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class ModelPostprocessConfig:
-    """
-    Параметры постобработки
-    """
-
     max_detections: int
     confidence_threshold: float
     iou_threshold: float
 
 
-@dataclass
+@dataclass(frozen=True)
 class ModelConfig:
-    """
-    Полный конфиг ONNX-модели
-    """
-
     model_name: str
     task_type: str
     model_path: str
     input: ModelInputConfig
     output: ModelOutputConfig
     postprocess: ModelPostprocessConfig
-    classes: List[str]
+    classes: list[str]
 
 
-@dataclass
+@dataclass(frozen=True)
 class RawPrediction:
-    """
-    Сырой выход модели после ONNX Runtime
-    """
-
-    outputs: List[Any]
+    outputs: list[np.ndarray]
 
 
-@dataclass
+@dataclass(frozen=True)
 class ModelInfo:
-    """
-    Краткая информация о загруженной модели
-    """
-
     model_name: str
     model_path: str
     input_name: str
-    output_names: List[str]
-    input_shape: Optional[Tuple[int, ...]] = None
-    output_shapes: Optional[List[Tuple[int, ...]]] = None
+    output_names: list[str]
+    input_shape: Optional[tuple[int, ...]] = None
+    output_shapes: Optional[list[tuple[int, ...]]] = None

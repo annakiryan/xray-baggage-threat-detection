@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSlider,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -18,13 +17,9 @@ class SourceGroup(QGroupBox):
     def __init__(self):
         super().__init__("Источник данных")
 
-        self.video_path_label = QLabel("Не выбрано")
-        self.video_path_label.setWordWrap(True)
-
         self.open_video_button = QPushButton("Открыть видео")
 
         form = QFormLayout()
-        form.addRow("Файл:", self.video_path_label)
         form.addRow(self.open_video_button)
         self.setLayout(form)
 
@@ -49,10 +44,8 @@ class SettingsGroup(QGroupBox):
     def __init__(
         self,
         confidence_threshold: float = 0.4,
-        iou_threshold: float = 0.5,
-        frame_skip: int = 1,
     ):
-        super().__init__("Параметры инференса")
+        super().__init__("Параметры точности")
 
         self.conf_slider = QSlider(Qt.Horizontal)
         self.conf_slider.setRange(1, 100)
@@ -66,26 +59,8 @@ class SettingsGroup(QGroupBox):
         conf_layout.addWidget(self.conf_slider)
         conf_layout.addWidget(self.conf_value_label)
 
-        self.iou_slider = QSlider(Qt.Horizontal)
-        self.iou_slider.setRange(1, 100)
-        self.iou_slider.setValue(int(iou_threshold * 100))
-        self.iou_value_label = QLabel(f"{iou_threshold:.2f}")
-
-        iou_widget = QWidget()
-        iou_layout = QHBoxLayout(iou_widget)
-        iou_layout.setContentsMargins(0, 0, 0, 0)
-        iou_layout.setSpacing(8)
-        iou_layout.addWidget(self.iou_slider)
-        iou_layout.addWidget(self.iou_value_label)
-
-        self.frame_skip_spin = QSpinBox()
-        self.frame_skip_spin.setRange(1, 30)
-        self.frame_skip_spin.setValue(frame_skip)
-
         form = QFormLayout()
-        form.addRow("Confidence:", conf_widget)
-        form.addRow("IoU:", iou_widget)
-        form.addRow("Каждый N-й кадр:", self.frame_skip_spin)
+        form.addRow("Порог уверенности:", conf_widget)
         self.setLayout(form)
 
 
@@ -96,7 +71,6 @@ class ClassesGroup(QGroupBox):
         super().__init__("Отображаемые классы")
 
         self.class_checkboxes: dict[int, QCheckBox] = {}
-        self.enabled_class_ids = set(range(len(class_names)))
 
         layout = QVBoxLayout()
         layout.setContentsMargins(8, 8, 8, 8)
@@ -113,7 +87,7 @@ class ClassesGroup(QGroupBox):
         for class_id, class_name in enumerate(class_names):
             checkbox = QCheckBox(class_name)
             checkbox.setChecked(True)
-            checkbox.stateChanged.connect(self._on_state_changed)
+            checkbox.stateChanged.connect(self._emit_current_selection)
 
             self.class_checkboxes[class_id] = checkbox
             scroll_layout.addWidget(checkbox)
@@ -123,39 +97,30 @@ class ClassesGroup(QGroupBox):
 
         layout.addWidget(scroll_area)
         self.setLayout(layout)
-        self.setMinimumHeight(240)
+        self.setMinimumHeight(270)
 
-    def _on_state_changed(self):
-        selected_ids = {
+    def _emit_current_selection(self):
+        self.selection_changed.emit(self.get_enabled_class_ids())
+
+    def get_enabled_class_ids(self) -> set[int]:
+        return {
             class_id
             for class_id, checkbox in self.class_checkboxes.items()
             if checkbox.isChecked()
         }
 
-        if not selected_ids:
-            sender = self.sender()
-            if sender is not None:
-                sender.blockSignals(True)
-                sender.setChecked(True)
-                sender.blockSignals(False)
-            return
-
-        self.enabled_class_ids = selected_ids
-        self.selection_changed.emit(selected_ids)
-
-    def get_enabled_class_ids(self) -> set[int]:
-        return set(self.enabled_class_ids)
+    def set_enabled_class_ids(self, class_ids: set[int]) -> None:
+        for class_id, checkbox in self.class_checkboxes.items():
+            checkbox.blockSignals(True)
+            checkbox.setChecked(class_id in class_ids)
+            checkbox.blockSignals(False)
 
 
 class StatusGroup(QGroupBox):
-    def __init__(self, model_name: str, device: str):
+    def __init__(self):
         super().__init__("Статус системы")
 
         self.status_label = QLabel("Ожидание")
-        self.model_label = QLabel(model_name)
-        self.device_label = QLabel(device)
-        self.fps_label = QLabel("-")
-        self.inference_label = QLabel("-")
         self.detections_label = QLabel("0")
 
         form = QFormLayout()
@@ -164,11 +129,10 @@ class StatusGroup(QGroupBox):
         self.setLayout(form)
 
     def update_metrics(
-        self, fps: float, inference_time_ms: float, detections_count: int
-    ):
-        self.fps_label.setText(f"{fps:.2f}")
-        self.inference_label.setText(f"{inference_time_ms:.2f}")
+        self,
+        detections_count: int,
+    ) -> None:
         self.detections_label.setText(str(detections_count))
 
-    def set_status(self, text: str):
+    def set_status(self, text: str) -> None:
         self.status_label.setText(text)

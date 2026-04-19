@@ -48,46 +48,6 @@ class VideoSource:
 
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-    def get_fps(self) -> float:
-        if not self.is_opened or self.cap is None:
-            raise RuntimeError("Видеоисточник не открыт")
-
-        fps = self.cap.get(cv2.CAP_PROP_FPS)
-        return float(fps) if fps > 0 else 0.0
-
-    def get_width(self) -> int:
-        if not self.is_opened or self.cap is None:
-            raise RuntimeError("Видеоисточник не открыт")
-
-        return int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-
-    def get_height(self) -> int:
-        if not self.is_opened or self.cap is None:
-            raise RuntimeError("Видеоисточник не открыт")
-
-        return int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    def get_frame_count(self) -> int:
-        if not self.is_opened or self.cap is None:
-            raise RuntimeError("Видеоисточник не открыт")
-
-        return int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    def get_current_frame_index(self) -> int:
-        if not self.is_opened or self.cap is None:
-            raise RuntimeError("Видеоисточник не открыт")
-
-        return int(self.cap.get(cv2.CAP_PROP_POS_FRAMES))
-
-    def get_source_info(self) -> dict:
-        return {
-            "source_path": str(self.source_path),
-            "fps": self.get_fps(),
-            "width": self.get_width(),
-            "height": self.get_height(),
-            "frame_count": self.get_frame_count(),
-        }
-
     def __enter__(self):
         self.open()
         return self

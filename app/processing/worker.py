@@ -1,20 +1,14 @@
 import time
 from pathlib import Path
-from typing import Optional
+from threading import Event
+from typing import Callable, Optional
 
-from PySide6.QtCore import QObject, Signal, Slot
-
+from app.domain.entities import FrameResult, ModelConfig
 from app.processing.frame_processor import FrameProcessor
 from app.video.video_source import VideoSource
-from app.domain.entities import FrameResult, ModelConfig
 
 
-class VideoProcessingWorker(QObject):
-    result_ready = Signal(object)
-    status_changed = Signal(str)
-    error_occurred = Signal(str)
-    finished = Signal()
-
+class VideoProcessingWorker:
     def __init__(
         self,
         model_config: ModelConfig,
@@ -23,24 +17,32 @@ class VideoProcessingWorker(QObject):
         iou_threshold: float = 0.5,
         process_every_n_frames: int = 1,
         draw_enabled: bool = True,
+        on_result_ready: Optional[Callable[[FrameResult], None]] = None,
+        on_status_changed: Optional[Callable[[str], None]] = None,
+        on_error: Optional[Callable[[str], None]] = None,
+        on_finished: Optional[Callable[[], None]] = None,
     ):
-        super().__init__()
-
         self.model_config = model_config
         self.device = device
-        self.confidence_threshold = confidence_threshold
-        self.iou_threshold = iou_threshold
+        self.confidence_threshold = float(confidence_threshold)
+        self.iou_threshold = float(iou_threshold)
         self.process_every_n_frames = max(1, int(process_every_n_frames))
-        self.draw_enabled = draw_enabled
+        self.draw_enabled = bool(draw_enabled)
+
+        self.on_result_ready = on_result_ready
+        self.on_status_changed = on_status_changed
+        self.on_error = on_error
+        self.on_finished = on_finished
+
         self.enabled_class_ids = set(range(len(self.model_config.classes)))
 
         self.video_path: Optional[str] = None
         self.video_source: Optional[VideoSource] = None
         self.frame_processor: Optional[FrameProcessor] = None
 
-        self._is_running = False
-        self._is_paused = False
-        self._finish_requested = False
+        self._running = False
+        self._pause_event = Event()
+        self._stop_event = Event()
 
         self._frame_index = 0
         self._last_result: Optional[FrameResult] = None
@@ -58,9 +60,6 @@ class VideoProcessingWorker(QObject):
         if self.frame_processor is not None:
             self.frame_processor.set_iou_threshold(value)
 
-    def set_process_every_n_frames(self, value: int) -> None:
-        self.process_every_n_frames = max(1, int(value))
-
     def set_draw_enabled(self, enabled: bool) -> None:
         self.draw_enabled = bool(enabled)
         if self.frame_processor is not None:
@@ -71,146 +70,142 @@ class VideoProcessingWorker(QObject):
         if self.frame_processor is not None:
             self.frame_processor.set_enabled_class_ids(class_ids)
 
-    @Slot()
-    def start(self) -> None:
+    def pause(self) -> None:
+        if not self._running:
+            return
+        if self._pause_event.is_set():
+            return
+
+        self._pause_event.set()
+        self._emit_status("Обработка приостановлена")
+
+    def resume(self) -> None:
+        if not self._running:
+            return
+        if not self._pause_event.is_set():
+            return
+
+        self._pause_event.clear()
+        self._emit_status("Обработка продолжена")
+
+    def stop(self) -> None:
+        if not self._running:
+            return
+
+        self._stop_event.set()
+        self._pause_event.clear()
+        self._emit_status("Запрошено завершение сеанса анализа")
+
+    def run(self) -> None:
+        try:
+            self._prepare_run()
+            self._run_loop()
+        except Exception as e:
+            self._emit_error(str(e))
+        finally:
+            self._cleanup()
+            self._emit_finished()
+
+    def _prepare_run(self) -> None:
         if not self.video_path:
-            self.error_occurred.emit("Не указан путь к видео")
-            self.finished.emit()
-            return
+            raise ValueError("Не указан путь к видео")
 
-        if not Path(self.video_path).exists():
-            self.error_occurred.emit(f"Видео не найдено: {self.video_path}")
-            self.finished.emit()
-            return
+        path = Path(self.video_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Видео не найдено: {self.video_path}")
 
-        self._is_running = True
-        self._is_paused = False
-        self._finish_requested = False
+        self._running = True
+        self._pause_event.clear()
+        self._stop_event.clear()
         self._frame_index = 0
         self._last_result = None
 
-        try:
-            self.status_changed.emit("Инициализация обработчика")
+        self._emit_status("Инициализация обработчика")
 
-            self.frame_processor = FrameProcessor(
-                model_config=self.model_config,
-                device=self.device,
-                confidence_threshold=self.confidence_threshold,
-                iou_threshold=self.iou_threshold,
-                draw_enabled=self.draw_enabled,
+        self.frame_processor = FrameProcessor(
+            model_config=self.model_config,
+            device=self.device,
+            confidence_threshold=self.confidence_threshold,
+            iou_threshold=self.iou_threshold,
+            draw_enabled=self.draw_enabled,
+        )
+        self.frame_processor.set_enabled_class_ids(self.enabled_class_ids)
+
+        self.video_source = VideoSource(self.video_path)
+        self.video_source.open()
+
+        self._emit_status("Идёт анализ")
+
+    def _run_loop(self) -> None:
+        assert self.video_source is not None
+        assert self.frame_processor is not None
+
+        total_start_time = time.perf_counter()
+
+        while self._running:
+            if self._stop_event.is_set():
+                self._emit_status("Сеанс анализа завершён")
+                break
+
+            if self._pause_event.is_set():
+                time.sleep(0.03)
+                continue
+
+            ok, frame = self.video_source.read()
+            if not ok or frame is None:
+                self._emit_status("Видео завершено")
+                break
+
+            self._frame_index += 1
+            current_result = self._process_frame(frame)
+
+            elapsed_total = time.perf_counter() - total_start_time
+            pipeline_fps = self._frame_index / elapsed_total if elapsed_total > 0 else 0.0
+            current_result.fps = pipeline_fps
+
+            self._emit_result(current_result)
+
+    def _process_frame(self, frame) -> FrameResult:
+        assert self.frame_processor is not None
+
+        should_run_inference = self._frame_index % self.process_every_n_frames == 0
+
+        if should_run_inference:
+            result = self.frame_processor.process_frame(frame)
+            self._last_result = result
+            return result
+
+        if self._last_result is not None:
+            return self.frame_processor.draw_existing_detections(
+                frame=frame,
+                detections=self._last_result.detections,
+                inference_time_ms=self._last_result.inference_time_ms,
             )
 
-            self.video_source = VideoSource(self.video_path)
-            self.video_source.open()
-
-            source_info = self.video_source.get_source_info()
-            self.status_changed.emit(
-                f"Видео открыто: {source_info['width']}x{source_info['height']}, "
-                f"fps={source_info['fps']:.2f}, frames={source_info['frame_count']}"
-            )
-
-            total_start_time = time.perf_counter()
-
-            while self._is_running:
-                if self._finish_requested:
-                    self.status_changed.emit("Сеанс анализа завершён")
-                    break
-
-                if self._is_paused:
-                    time.sleep(0.03)
-                    continue
-
-                ok, frame = self.video_source.read()
-                if not ok or frame is None:
-                    self.status_changed.emit("Видео завершено")
-                    break
-
-                self._frame_index += 1
-                should_process = self._frame_index % self.process_every_n_frames == 0
-
-                if should_process:
-                    current_result = self.frame_processor.process_frame(frame)
-                    self._last_result = current_result
-                else:
-                    if self._last_result is not None:
-                        current_result = self.frame_processor.draw_existing_detections(
-                            frame=frame,
-                            detections=self._last_result.detections,
-                            inference_time_ms=self._last_result.inference_time_ms,
-                        )
-                    else:
-                        current_result = (
-                            self.frame_processor.process_frame_without_drawing(frame)
-                        )
-
-                elapsed_total = time.perf_counter() - total_start_time
-                pipeline_fps = (
-                    self._frame_index / elapsed_total if elapsed_total > 0 else 0.0
-                )
-                current_result.fps = pipeline_fps
-
-                self.result_ready.emit(current_result)
-
-            self._cleanup()
-            self._is_running = False
-            self._is_paused = False
-            self.finished.emit()
-
-        except Exception as e:
-            self._cleanup()
-            self._is_running = False
-            self._is_paused = False
-            self.error_occurred.emit(str(e))
-            self.finished.emit()
-
-    @Slot()
-    def pause(self) -> None:
-        if not self._is_running:
-            return
-
-        if self._is_paused:
-            return
-
-        self._is_paused = True
-        self.status_changed.emit("Обработка приостановлена")
-
-    @Slot()
-    def resume(self) -> None:
-        if not self._is_running:
-            return
-
-        if not self._is_paused:
-            return
-
-        self._is_paused = False
-        self.status_changed.emit("Обработка продолжена")
-
-    @Slot()
-    def finish_processing(self) -> None:
-        """
-        Завершить текущий сеанс анализа.
-        Освобождает видеоисточник и завершает цикл обработки.
-
-        Это НЕ команда остановки ленты интроскопа.
-        """
-        if not self._is_running:
-            return
-
-        self._finish_requested = True
-        self._is_paused = False
-        self.status_changed.emit("Запрошено завершение сеанса анализа")
-
-    @Slot()
-    def stop(self) -> None:
-        self.finish_processing()
-
-    def is_running(self) -> bool:
-        return self._is_running
-
-    def is_paused(self) -> bool:
-        return self._is_paused
+        return self.frame_processor.process_frame_without_drawing(frame)
 
     def _cleanup(self) -> None:
         if self.video_source is not None:
             self.video_source.release()
             self.video_source = None
+
+        self.frame_processor = None
+        self._running = False
+        self._pause_event.clear()
+        self._stop_event.clear()
+
+    def _emit_result(self, result: FrameResult) -> None:
+        if self.on_result_ready is not None:
+            self.on_result_ready(result)
+
+    def _emit_status(self, text: str) -> None:
+        if self.on_status_changed is not None:
+            self.on_status_changed(text)
+
+    def _emit_error(self, text: str) -> None:
+        if self.on_error is not None:
+            self.on_error(text)
+
+    def _emit_finished(self) -> None:
+        if self.on_finished is not None:
+            self.on_finished()

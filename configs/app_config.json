@@ -1,10 +1,11 @@
 {
   "app_name": "XRay Dangerous Object Detection",
-  "logs_dir": "logs",
   "models_dir": "models",
-  "default_video_dir": "data",
+  "default_video": "data/videos/video.mp4",
+  "logs_dir": "logs",
+  "results_dir": "results",
   "default_confidence_threshold": 0.8,
-  "default_iou_threshold": 0.7,
+  "default_iou_threshold": 0.2,
   "default_frame_skip": 1,
   "device": "cpu"
 }

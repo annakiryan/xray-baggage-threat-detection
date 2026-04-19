@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Optional
 
 import cv2
-from PySide6.QtCore import Qt, QThread, QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -14,9 +14,8 @@ from PySide6.QtWidgets import (
     QLabel,
 )
 
-from app.processing.worker import VideoProcessingWorker
-from app.domain.entities import FrameResult, ModelConfig
-from app.video.capture_service import CaptureService
+from app.domain.entities import FrameResult
+from app.session import AnalysisSession
 from app.ui.styles import MAIN_WINDOW_STYLE
 from app.ui.widgets import (
     SourceGroup,
@@ -30,35 +29,31 @@ from app.ui.widgets import (
 class MainWindow(QMainWindow):
     def __init__(
         self,
-        model_config: ModelConfig,
-        device: str = "cpu",
-        confidence_threshold: float = 0.4,
-        iou_threshold: float = 0.5,
-        frame_skip: int = 1,
+        session: AnalysisSession,
     ):
         super().__init__()
 
-        self.model_config = model_config
-        self.device = device
-        self.default_confidence_threshold = confidence_threshold
-        self.default_iou_threshold = iou_threshold
-        self.default_frame_skip = frame_skip
+        self.analysis_session = session
 
-        self.video_path: Optional[str] = None
-        self.worker_thread: Optional[QThread] = None
-        self.worker: Optional[VideoProcessingWorker] = None
+        self.model_config = session.model_config
+        self.default_confidence_threshold = session.confidence_threshold
+
+        self.video_path: Optional[str] = session.video_path
         self.current_display_frame = None
 
-        self.analysis_running = False
-        self.analysis_paused = False
-
-        self.setWindowTitle("XRay Dangerous Object Detection")
+        self.setWindowTitle("Детекция запрещенных предметов")
         self.resize(1450, 880)
 
         self._build_ui()
+        self.showMaximized()
         self._apply_styles()
         self._connect_signals()
+        self._connect_session_signals()
         self._update_control_states()
+
+        self._restart_after_stop = False
+        self._clear_video_after_stop = False
+        self._ignore_result_frames = False
 
     def _build_ui(self):
         central = QWidget()
@@ -69,7 +64,7 @@ class MainWindow(QMainWindow):
         root_layout.setSpacing(16)
 
         left_layout = QVBoxLayout()
-        self.video_label = QLabel("Видео не загружено")
+        self.video_label = QLabel()
         self.video_label.setAlignment(Qt.AlignCenter)
         self.video_label.setMinimumSize(920, 680)
         self.video_label.setObjectName("videoLabel")
@@ -85,14 +80,9 @@ class MainWindow(QMainWindow):
         self.control_group = ControlGroup()
         self.settings_group = SettingsGroup(
             confidence_threshold=self.default_confidence_threshold,
-            iou_threshold=self.default_iou_threshold,
-            frame_skip=self.default_frame_skip,
         )
         self.classes_group = ClassesGroup(self.model_config.classes)
-        self.status_group = StatusGroup(
-            model_name=self.model_config.model_name,
-            device=self.device,
-        )
+        self.status_group = StatusGroup()
 
         right_layout.addWidget(self.source_group)
         right_layout.addWidget(self.control_group)
@@ -114,31 +104,33 @@ class MainWindow(QMainWindow):
         self.control_group.capture_button.clicked.connect(self._capture_frame)
 
         self.settings_group.conf_slider.valueChanged.connect(self._on_conf_changed)
-        self.settings_group.iou_slider.valueChanged.connect(self._on_iou_changed)
-        self.settings_group.frame_skip_spin.valueChanged.connect(
-            self._on_frame_skip_changed
-        )
 
         self.classes_group.selection_changed.connect(self._on_class_selection_changed)
 
+    def _connect_session_signals(self):
+        self.analysis_session.result_ready.connect(self._on_result_ready)
+        self.analysis_session.status_changed.connect(self._on_status_changed)
+        self.analysis_session.error_occurred.connect(self._on_error)
+        self.analysis_session.session_started.connect(self._on_session_started)
+        self.analysis_session.session_finished.connect(self._on_session_finished)
+
     def _update_control_states(self):
         video_selected = self.video_path is not None
+        analysis_running = self.analysis_session.is_running()
+        analysis_paused = self.analysis_session.is_paused()
 
         self.control_group.analysis_toggle_button.setEnabled(video_selected)
 
-        if self.analysis_running:
-            self.control_group.analysis_toggle_button.setText("Остановить анализ")
-        else:
-            self.control_group.analysis_toggle_button.setText("Запустить анализ")
+        self.control_group.analysis_toggle_button.setText(
+            "Остановить анализ" if analysis_running else "Запустить анализ"
+        )
 
-        if self.analysis_running:
+        if analysis_running:
             self.control_group.pause_toggle_button.setEnabled(True)
             self.control_group.capture_button.setEnabled(True)
-
-            if self.analysis_paused:
-                self.control_group.pause_toggle_button.setText("Продолжить")
-            else:
-                self.control_group.pause_toggle_button.setText("Пауза")
+            self.control_group.pause_toggle_button.setText(
+                "Продолжить" if analysis_paused else "Пауза"
+            )
         else:
             self.control_group.pause_toggle_button.setEnabled(False)
             self.control_group.pause_toggle_button.setText("Пауза")
@@ -158,125 +150,62 @@ class MainWindow(QMainWindow):
             return
 
         self.video_path = file_path
-        self.source_group.video_path_label.setText(file_path)
+        self.analysis_session.set_video_path(file_path)
+
+        if self.analysis_session.is_running():
+            self._restart_after_stop = True
+            self.status_group.set_status("Выбрано новое видео, завершение текущего сеанса...")
+            self.analysis_session.stop()
+            return
+
         self.status_group.set_status("Видео выбрано")
         self._update_control_states()
 
     def _toggle_analysis(self):
-        if not self.analysis_running:
-            self._start_processing()
-        else:
-            self._stop_processing()
-
-    def _toggle_pause(self):
-        if not self.analysis_running or self.worker is None:
+        if self.analysis_session.is_running():
+            self._clear_video_after_stop = True
+            self._ignore_result_frames = True
+            self.status_group.set_status("Завершение сеанса...")
+            self.analysis_session.stop()
+            self._update_control_states()
             return
 
-        if not self.analysis_paused:
-            self.worker.pause()
-            self.analysis_paused = True
-        else:
-            self.worker.resume()
-            self.analysis_paused = False
-
-        self._update_control_states()
-
-    def _start_processing(self):
         if not self.video_path:
             QMessageBox.warning(self, "Ошибка", "Сначала выберите видео")
             return
 
-        if self.worker_thread is not None:
-            QMessageBox.information(self, "Информация", "Обработка уже запущена")
+        self._ignore_result_frames = False
+        self.status_group.set_status("Запуск обработки")
+        self.analysis_session.start()
+
+    def _toggle_pause(self):
+        if not self.analysis_session.is_running():
             return
 
-        self.worker_thread = QThread()
-        self.worker = VideoProcessingWorker(
-            model_config=self.model_config,
-            device=self.device,
-            confidence_threshold=self.settings_group.conf_slider.value() / 100.0,
-            iou_threshold=self.settings_group.iou_slider.value() / 100.0,
-            process_every_n_frames=self.settings_group.frame_skip_spin.value(),
-            draw_enabled=True,
-        )
+        if self.analysis_session.is_paused():
+            self.analysis_session.resume()
+        else:
+            self.analysis_session.pause()
 
-        self.worker.set_video_path(self.video_path)
-        self.worker.set_enabled_class_ids(self.classes_group.get_enabled_class_ids())
-        self.worker.moveToThread(self.worker_thread)
-
-        self.worker_thread.started.connect(self.worker.start)
-        self.worker.result_ready.connect(self._on_result_ready)
-        self.worker.status_changed.connect(self._on_status_changed)
-        self.worker.error_occurred.connect(self._on_error)
-        self.worker.finished.connect(self._on_worker_finished)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-
-        self.worker_thread.start()
-
-        self.analysis_running = True
-        self.analysis_paused = False
-        self.status_group.set_status("Запуск обработки")
         self._update_control_states()
-
-    def _stop_processing(self):
-        if self.worker is not None:
-            self.worker.stop()
 
     def _on_conf_changed(self, value: int):
         conf = value / 100.0
         self.settings_group.conf_value_label.setText(f"{conf:.2f}")
-
-        if self.worker is not None:
-            self.worker.set_confidence_threshold(conf)
-
-    def _on_iou_changed(self, value: int):
-        iou = value / 100.0
-        self.settings_group.iou_value_label.setText(f"{iou:.2f}")
-
-        if self.worker is not None:
-            self.worker.set_iou_threshold(iou)
-
-    def _on_frame_skip_changed(self, value: int):
-        if self.worker is not None:
-            self.worker.set_process_every_n_frames(value)
+        self.analysis_session.set_confidence_threshold(conf)
 
     def _on_class_selection_changed(self, selected_ids: set[int]):
-        if not selected_ids:
-            QMessageBox.warning(
-                self,
-                "Предупреждение",
-                "Должен быть выбран хотя бы один класс.",
-            )
-            return
+        self.analysis_session.set_enabled_class_ids(selected_ids)
 
-        if self.worker is not None:
-            self.worker.set_enabled_class_ids(selected_ids)
+    def _on_session_started(self):
+        self._update_control_states()
 
-    def _on_result_ready(self, result: FrameResult):
-        self.current_display_frame = result.frame.copy()
-        self._update_video(result.frame)
-        self.status_group.update_metrics(
-            fps=result.fps,
-            inference_time_ms=result.inference_time_ms,
-            detections_count=len(result.detections),
-        )
+    def _on_session_finished(self):
+        if self._clear_video_after_stop:
+            self._clear_video_after_stop = False
+            self._clear_video_display()
 
-    def _on_status_changed(self, text: str):
-        self.status_group.set_status(text)
-
-    def _on_error(self, message: str):
-        QMessageBox.critical(self, "Ошибка", message)
-        self.status_group.set_status("Ошибка")
-
-    def _on_worker_finished(self):
-        self.worker = None
-        self.worker_thread = None
-
-        self.analysis_running = False
-        self.analysis_paused = False
-
+        self._ignore_result_frames = False
         self._update_control_states()
 
         if self.status_group.status_label.text() not in (
@@ -286,11 +215,30 @@ class MainWindow(QMainWindow):
         ):
             self.status_group.set_status("Готово")
 
+    def _on_result_ready(self, result: FrameResult):
+        if self._ignore_result_frames:
+            return
+
+        self.current_display_frame = result.frame.copy()
+        self._update_video(result.frame)
+        self.status_group.update_metrics(
+            detections_count=len(result.detections),
+        )
+
+    def _on_status_changed(self, text: str):
+        self.status_group.set_status(text)
+        self._update_control_states()
+
+    def _on_error(self, message: str):
+        QMessageBox.critical(self, "Ошибка", message)
+        self.status_group.set_status("Ошибка")
+        self._update_control_states()
+
     def _frame_to_pixmap(self, frame) -> QPixmap:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb.shape
-        bytes_per_line = ch * w
-        image = QImage(rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        height, width, channels = rgb.shape
+        bytes_per_line = channels * width
+        image = QImage(rgb.data, width, height, bytes_per_line, QImage.Format_RGB888)
         return QPixmap.fromImage(image)
 
     def _update_video(self, frame):
@@ -320,17 +268,10 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            save_path = CaptureService.save_frame(
-                self.current_display_frame,
-                results_dir="results",
-            )
-
-            self.status_group.set_status(f"Кадр сохранён: {Path(save_path).name}")
+            self.analysis_session.capture_frame(self.current_display_frame)
             self._show_capture_success_feedback()
-
         except Exception as e:
             QMessageBox.critical(self, "Ошибка сохранения", str(e))
-            self.status_group.set_status("Ошибка сохранения кадра")
 
     def _show_capture_success_feedback(self):
         button = self.control_group.capture_button
@@ -344,5 +285,9 @@ class MainWindow(QMainWindow):
     def _restore_capture_button(self, text: str):
         self.control_group.capture_button.setText(text)
         self.control_group.capture_button.setEnabled(
-            self.analysis_running or self.current_display_frame is not None
+            self.analysis_session.is_running() or self.current_display_frame is not None
         )
+
+    def _clear_video_display(self):
+        self.current_display_frame = None
+        self.video_label.clear()

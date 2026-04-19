@@ -5,15 +5,12 @@ from app.domain.entities import AppConfig
 
 
 class ConfigService:
-    """
-    Сервис для загрузки общего конфига приложения
-    """
-
     REQUIRED_FIELDS = [
         "app_name",
-        "logs_dir",
         "models_dir",
-        "default_video_dir",
+        "default_video",
+        "logs_dir",
+        "results_dir",
         "default_confidence_threshold",
         "default_iou_threshold",
         "default_frame_skip",
@@ -36,9 +33,10 @@ class ConfigService:
 
         return AppConfig(
             app_name=data["app_name"],
-            logs_dir=data["logs_dir"],
             models_dir=data["models_dir"],
-            default_video_dir=data["default_video_dir"],
+            default_video=data["default_video"],
+            logs_dir=data["logs_dir"],
+            results_dir=data["results_dir"],
             default_confidence_threshold=float(data["default_confidence_threshold"]),
             default_iou_threshold=float(data["default_iou_threshold"]),
             default_frame_skip=int(data["default_frame_skip"]),
@@ -69,15 +67,18 @@ class ConfigService:
 
         if not isinstance(data["logs_dir"], str) or not data["logs_dir"].strip():
             raise ValueError("Поле 'logs_dir' должно быть непустой строкой")
+        
+        if not isinstance(data["results_dir"], str) or not data["results_dir"].strip():
+            raise ValueError("Поле 'results_dir' должно быть непустой строкой")
 
         if not isinstance(data["models_dir"], str) or not data["models_dir"].strip():
             raise ValueError("Поле 'models_dir' должно быть непустой строкой")
 
         if (
-            not isinstance(data["default_video_dir"], str)
-            or not data["default_video_dir"].strip()
+            not isinstance(data["default_video"], str)
+            or not data["default_video"].strip()
         ):
-            raise ValueError("Поле 'default_video_dir' должно быть непустой строкой")
+            raise ValueError("Поле 'default_video' должно быть непустой строкой")
 
         if (
             float(data["default_confidence_threshold"]) < 0
