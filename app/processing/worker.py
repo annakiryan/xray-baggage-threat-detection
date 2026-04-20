@@ -134,6 +134,10 @@ class VideoProcessingWorker:
         self.video_source = VideoSource(self.video_path)
         self.video_source.open()
 
+        self.source_fps = self.video_source.get_fps()
+        if self.source_fps <= 0:
+            self.source_fps = 25.0
+
         self._emit_status("Идёт анализ")
 
     def _run_loop(self) -> None:
@@ -160,8 +164,12 @@ class VideoProcessingWorker:
             current_result = self._process_frame(frame)
 
             elapsed_total = time.perf_counter() - total_start_time
-            pipeline_fps = self._frame_index / elapsed_total if elapsed_total > 0 else 0.0
+            pipeline_fps = (
+                self._frame_index / elapsed_total if elapsed_total > 0 else 0.0
+            )
             current_result.fps = pipeline_fps
+            current_result.frame_index = self._frame_index
+            current_result.timestamp_sec = self._frame_index / self.source_fps
 
             self._emit_result(current_result)
 

@@ -154,7 +154,9 @@ class MainWindow(QMainWindow):
 
         if self.analysis_session.is_running():
             self._restart_after_stop = True
-            self.status_group.set_status("Выбрано новое видео, завершение текущего сеанса...")
+            self.status_group.set_status(
+                "Выбрано новое видео, завершение текущего сеанса..."
+            )
             self.analysis_session.stop()
             return
 

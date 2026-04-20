@@ -48,6 +48,13 @@ class VideoSource:
 
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
+    def get_fps(self) -> float:
+        if not self.is_opened or self.cap is None:
+            raise RuntimeError("Видеоисточник не открыт")
+
+        fps = self.cap.get(cv2.CAP_PROP_FPS)
+        return float(fps) if fps > 0 else 0.0
+
     def __enter__(self):
         self.open()
         return self

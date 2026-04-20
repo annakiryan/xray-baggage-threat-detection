@@ -18,6 +18,8 @@ class FrameResult:
     detections: list[Detection] = field(default_factory=list)
     inference_time_ms: float = 0.0
     fps: float = 0.0
+    frame_index: int = 0
+    timestamp_sec: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -83,3 +85,25 @@ class ModelInfo:
     output_names: list[str]
     input_shape: Optional[tuple[int, ...]] = None
     output_shapes: Optional[list[tuple[int, ...]]] = None
+
+
+@dataclass
+class DetectionEvent:
+    event_id: int
+    class_ids: list[int]
+    class_names: list[str]
+    frame_index: int
+    timestamp_sec: float
+    image_path: str
+    bboxes: list[tuple[int, int, int, int]] = field(default_factory=list)
+
+
+@dataclass
+class SessionSummary:
+    session_id: str
+    video_path: str
+    started_at: str
+    finished_at: Optional[str] = None
+    total_detection_events: int = 0
+    class_counts: dict[str, int] = field(default_factory=dict)
+    events: list[DetectionEvent] = field(default_factory=list)

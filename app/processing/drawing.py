@@ -148,7 +148,9 @@ def _compute_label_background_rect(
     }
 
 
-def _load_font(font_size: int, font_path: str | None = None) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _load_font(
+    font_size: int, font_path: str | None = None
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidate_paths = []
 
     if font_path:

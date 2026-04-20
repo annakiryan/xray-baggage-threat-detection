@@ -142,10 +142,7 @@ class FrameProcessor:
         self,
         detections: list[Detection],
     ) -> list[Detection]:
-        return [
-            det for det in detections
-            if det.class_id in self.enabled_class_ids
-        ]
+        return [det for det in detections if det.class_id in self.enabled_class_ids]
 
     def _prepare_output_frame(
         self,
@@ -172,9 +169,7 @@ class FrameProcessor:
             raise ValueError("Получен пустой кадр для обработки")
 
         if not isinstance(frame, np.ndarray):
-            raise TypeError(
-                f"Ожидался numpy.ndarray, получено: {type(frame).__name__}"
-            )
+            raise TypeError(f"Ожидался numpy.ndarray, получено: {type(frame).__name__}")
 
         if frame.ndim < 2:
             raise ValueError("Некорректный формат кадра: ожидалось изображение")

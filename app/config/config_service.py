@@ -67,7 +67,7 @@ class ConfigService:
 
         if not isinstance(data["logs_dir"], str) or not data["logs_dir"].strip():
             raise ValueError("Поле 'logs_dir' должно быть непустой строкой")
-        
+
         if not isinstance(data["results_dir"], str) or not data["results_dir"].strip():
             raise ValueError("Поле 'results_dir' должно быть непустой строкой")
 

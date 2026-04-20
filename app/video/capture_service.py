@@ -23,7 +23,9 @@ class CaptureService:
         height, width = result.shape[:2]
 
         bar_height = 46
-        cv2.rectangle(result, (0, height - bar_height), (width, height), (30, 30, 30), -1)
+        cv2.rectangle(
+            result, (0, height - bar_height), (width, height), (30, 30, 30), -1
+        )
 
         return draw_text_pil(
             frame=result,
@@ -34,7 +36,11 @@ class CaptureService:
         )
 
     @staticmethod
-    def save_frame(frame: np.ndarray, results_dir: str = "results") -> Path:
+    def save_frame_with_overlay(
+        frame: np.ndarray,
+        results_dir: str = "results",
+        file_prefix: str = "capture",
+    ) -> Path:
         if frame is None:
             raise ValueError("Нет кадра для сохранения")
 
@@ -49,10 +55,18 @@ class CaptureService:
             f"Дата и время: {timestamp_for_text}",
         )
 
-        save_path = results_path / f"capture_{timestamp_for_filename}.jpg"
+        save_path = results_path / f"{file_prefix}_{timestamp_for_filename}.jpg"
 
         ok = cv2.imwrite(str(save_path), frame_with_timestamp)
         if not ok:
             raise RuntimeError(f"Не удалось сохранить кадр: {save_path}")
 
         return save_path
+
+    @staticmethod
+    def save_frame(frame: np.ndarray, results_dir: str = "results") -> Path:
+        return CaptureService.save_frame_with_overlay(
+            frame=frame,
+            results_dir=results_dir,
+            file_prefix="capture",
+        )

@@ -8,6 +8,8 @@ from app.domain.entities import FrameResult, ModelConfig
 from app.logging import LoggerService
 from app.processing.worker import VideoProcessingWorker
 from app.video.capture_service import CaptureService
+from app.session.session_results_service import SessionResultsService
+from app.processing.detection_event_manager import DetectionEventManager
 
 
 class AnalysisSession(QObject):
@@ -54,6 +56,14 @@ class AnalysisSession(QObject):
             logs_dir=logs_dir,
         )
 
+        self.session_dir: Optional[Path] = None
+        self.detections_dir: Optional[Path] = None
+        self.manual_captures_dir: Optional[Path] = None
+        self.summary_path: Optional[Path] = None
+        self.session_summary = None
+
+        self.detection_event_manager: Optional[DetectionEventManager] = None
+
     def set_video_path(self, video_path: str) -> None:
         self.video_path = video_path
 
@@ -61,7 +71,9 @@ class AnalysisSession(QObject):
         self.confidence_threshold = float(value)
         if self._worker is not None:
             self._worker.set_confidence_threshold(value)
-        self.logger.info("Изменён confidence_threshold: %.2f", self.confidence_threshold)
+        self.logger.info(
+            "Изменён confidence_threshold: %.2f", self.confidence_threshold
+        )
 
     def set_enabled_class_ids(self, class_ids: set[int]) -> None:
         self.enabled_class_ids = set(class_ids)
@@ -95,6 +107,23 @@ class AnalysisSession(QObject):
         if not Path(self.video_path).exists():
             self._emit_error(f"Видео не найдено: {self.video_path}")
             return
+
+        session_data = SessionResultsService.create_session_structure(
+            results_dir=self.results_dir,
+            video_path=self.video_path,
+        )
+
+        self.session_dir = session_data["session_dir"]
+        self.detections_dir = session_data["detections_dir"]
+        self.manual_captures_dir = session_data["manual_captures_dir"]
+        self.summary_path = session_data["summary_path"]
+        self.session_summary = session_data["summary"]
+
+        self.detection_event_manager = DetectionEventManager(
+            session_summary=self.session_summary,
+            summary_path=self.summary_path,
+            detections_dir=self.detections_dir,
+        )
 
         self._worker = VideoProcessingWorker(
             model_config=self.model_config,
@@ -147,12 +176,17 @@ class AnalysisSession(QObject):
         if frame is None:
             raise ValueError("Нет кадра для сохранения")
 
+        target_dir = self.manual_captures_dir or Path(self.results_dir)
+
         return CaptureService.save_frame(
             frame=frame,
-            results_dir=self.results_dir,
+            results_dir=str(target_dir),
         )
 
     def _handle_result_ready(self, result: FrameResult) -> None:
+        if self.detection_event_manager is not None:
+            self.detection_event_manager.process_frame_result(result)
+
         self.result_ready.emit(result)
 
     def _handle_status_changed(self, text: str) -> None:
@@ -167,9 +201,23 @@ class AnalysisSession(QObject):
         self.error_occurred.emit(message)
 
     def _on_worker_finished(self) -> None:
+        if self.session_summary is not None and self.summary_path is not None:
+            SessionResultsService.finalize_summary(
+                summary=self.session_summary,
+                summary_path=self.summary_path,
+            )
+
         self._worker = None
         self._thread = None
         self._is_running = False
         self._is_paused = False
+
+        self.session_dir = None
+        self.detections_dir = None
+        self.manual_captures_dir = None
+        self.summary_path = None
+        self.session_summary = None
+        self.detection_event_manager = None
+
         self.logger.info("Сеанс анализа завершён")
         self.session_finished.emit()
