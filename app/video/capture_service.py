@@ -55,7 +55,7 @@ class CaptureService:
             f"Дата и время: {timestamp_for_text}",
         )
 
-        save_path = results_path / f"{file_prefix}_{timestamp_for_filename}.jpg"
+        save_path = results_path / f"{timestamp_for_filename}.jpg"
 
         ok = cv2.imwrite(str(save_path), frame_with_timestamp)
         if not ok:
@@ -68,5 +68,5 @@ class CaptureService:
         return CaptureService.save_frame_with_overlay(
             frame=frame,
             results_dir=results_dir,
-            file_prefix="capture",
+            file_prefix="",
         )

@@ -1,0 +1,39 @@
+{
+  "model_name": "YOLOv10 nano",
+  "model_path": "models/xray_yolo10n/model.onnx",
+  "task_type": "detection",
+  "input": {
+    "width": 640,
+    "height": 640,
+    "channels": 3,
+    "input_name": "images",
+    "color_format": "rgb",
+    "normalize": true,
+    "scale": 255.0,
+    "mean": [0.0, 0.0, 0.0],
+    "std": [1.0, 1.0, 1.0]
+  },
+  "output": {
+    "output_names": ["output0"],
+    "format": "yolo"
+  },
+  "postprocess": {
+    "confidence_threshold": 0.4,
+    "iou_threshold": 0.5,
+    "max_detections": 100
+  },
+  "classes": [
+   "Дубинка",
+   "Плоскогубцы",
+   "Молоток",
+   "Пауэрбанк",
+   "Ножницы",
+   "Гаечный ключ",
+   "Пистолет",
+   "Пуля",
+   "Спрей",
+   "Наручники",
+   "Нож",
+   "Зажигалка"
+   ]
+}

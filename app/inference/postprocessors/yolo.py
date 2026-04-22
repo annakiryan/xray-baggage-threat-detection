@@ -38,7 +38,9 @@ class YoloPostprocessor(BasePostprocessor):
             preprocess_meta=preprocess_meta,
         )
 
-        detections = self._apply_nms(detections, iou_threshold)
+        if predictions.shape[-1] != 6:
+            detections = self._apply_nms(detections, iou_threshold)
+
         max_detections = self.model_config.postprocess.max_detections
         return detections[:max_detections]
 
@@ -52,6 +54,11 @@ class YoloPostprocessor(BasePostprocessor):
                 f"Ожидался выход модели размерности 2 или 3, получено: shape={predictions.shape}"
             )
 
+        # Если это уже готовые детекции вида (N, 6), ничего не трогаем
+        if predictions.shape[-1] == 6:
+            return predictions
+
+        # Для классического YOLO ONNX часто приходит (C, N), а нужен (N, C)
         if predictions.shape[0] < predictions.shape[1]:
             predictions = predictions.T
 
@@ -73,12 +80,74 @@ class YoloPostprocessor(BasePostprocessor):
         for pred in predictions:
             values_count = pred.shape[0]
 
-            if values_count == 4 + num_classes:
+            # Формат готовых детекций: x1, y1, x2, y2, score, class_id
+            if values_count == 6:
+                x1, y1, x2, y2, confidence, class_id = pred[:6]
+
+                confidence = float(confidence)
+                class_id = int(class_id)
+
+                if confidence < confidence_threshold:
+                    continue
+
+                if class_id < 0 or class_id >= num_classes:
+                    continue
+
+                # Если был letterbox, нужно вернуть координаты в оригинальное изображение
+                if preprocess_meta is not None:
+                    scale = preprocess_meta["scale"]
+                    pad_left = preprocess_meta["pad_left"]
+                    pad_top = preprocess_meta["pad_top"]
+
+                    x1 = (float(x1) - pad_left) / scale
+                    y1 = (float(y1) - pad_top) / scale
+                    x2 = (float(x2) - pad_left) / scale
+                    y2 = (float(y2) - pad_top) / scale
+
+                x1 = int(max(0, min(round(x1), original_width - 1)))
+                y1 = int(max(0, min(round(y1), original_height - 1)))
+                x2 = int(max(0, min(round(x2), original_width - 1)))
+                y2 = int(max(0, min(round(y2), original_height - 1)))
+
+                detections.append(
+                    Detection(
+                        class_id=class_id,
+                        class_name=class_names[class_id],
+                        confidence=confidence,
+                        bbox=(x1, y1, x2, y2),
+                    )
+                )
+
+            # Формат: cx, cy, w, h, class_scores...
+            elif values_count == 4 + num_classes:
                 cx, cy, w, h = pred[:4]
                 class_scores = pred[4:]
                 class_id = int(np.argmax(class_scores))
                 confidence = float(class_scores[class_id])
 
+                if confidence < confidence_threshold:
+                    continue
+
+                x1, y1, x2, y2 = self._xywh_to_xyxy_letterbox(
+                    cx=float(cx),
+                    cy=float(cy),
+                    w=float(w),
+                    h=float(h),
+                    original_width=original_width,
+                    original_height=original_height,
+                    preprocess_meta=preprocess_meta,
+                )
+
+                detections.append(
+                    Detection(
+                        class_id=class_id,
+                        class_name=class_names[class_id],
+                        confidence=confidence,
+                        bbox=(x1, y1, x2, y2),
+                    )
+                )
+
+            # Формат: cx, cy, w, h, objectness, class_scores...
             elif values_count == 5 + num_classes:
                 cx, cy, w, h = pred[:4]
                 objectness = float(pred[4])
@@ -86,33 +155,33 @@ class YoloPostprocessor(BasePostprocessor):
                 class_id = int(np.argmax(class_scores))
                 confidence = float(objectness * class_scores[class_id])
 
+                if confidence < confidence_threshold:
+                    continue
+
+                x1, y1, x2, y2 = self._xywh_to_xyxy_letterbox(
+                    cx=float(cx),
+                    cy=float(cy),
+                    w=float(w),
+                    h=float(h),
+                    original_width=original_width,
+                    original_height=original_height,
+                    preprocess_meta=preprocess_meta,
+                )
+
+                detections.append(
+                    Detection(
+                        class_id=class_id,
+                        class_name=class_names[class_id],
+                        confidence=confidence,
+                        bbox=(x1, y1, x2, y2),
+                    )
+                )
+
             else:
                 raise ValueError(
                     f"Неожиданное число параметров в предсказании: {values_count}. "
-                    f"Ожидалось {4 + num_classes} или {5 + num_classes}."
+                    f"Ожидалось 6, {4 + num_classes} или {5 + num_classes}."
                 )
-
-            if confidence < confidence_threshold:
-                continue
-
-            x1, y1, x2, y2 = self._xywh_to_xyxy_letterbox(
-                cx=float(cx),
-                cy=float(cy),
-                w=float(w),
-                h=float(h),
-                original_width=original_width,
-                original_height=original_height,
-                preprocess_meta=preprocess_meta,
-            )
-
-            detections.append(
-                Detection(
-                    class_id=class_id,
-                    class_name=class_names[class_id],
-                    confidence=confidence,
-                    bbox=(x1, y1, x2, y2),
-                )
-            )
 
         return detections
 

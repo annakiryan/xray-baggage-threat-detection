@@ -87,6 +87,6 @@ class SessionResultsService:
         save_path = CaptureService.save_frame_with_overlay(
             frame=frame,
             results_dir=str(detections_dir),
-            file_prefix=f"detection",
+            file_prefix="",
         )
         return str(save_path)

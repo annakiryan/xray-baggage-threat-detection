@@ -7,7 +7,6 @@ from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
-    QMainWindow,
     QMessageBox,
     QVBoxLayout,
     QWidget,
@@ -15,9 +14,8 @@ from PySide6.QtWidgets import (
 )
 
 from app.domain.entities import FrameResult
-from app.session import AnalysisSession
-from app.ui.styles import MAIN_WINDOW_STYLE
-from app.ui.widgets import (
+from app.session.analysis_session import AnalysisSession
+from app.ui.analysis.widgets import (
     SourceGroup,
     ControlGroup,
     SettingsGroup,
@@ -26,11 +24,8 @@ from app.ui.widgets import (
 )
 
 
-class MainWindow(QMainWindow):
-    def __init__(
-        self,
-        session: AnalysisSession,
-    ):
+class AnalysisPage(QWidget):
+    def __init__(self, session: AnalysisSession):
         super().__init__()
 
         self.analysis_session = session
@@ -41,25 +36,17 @@ class MainWindow(QMainWindow):
         self.video_path: Optional[str] = session.video_path
         self.current_display_frame = None
 
-        self.setWindowTitle("Детекция запрещенных предметов")
-        self.resize(1450, 880)
-
-        self._build_ui()
-        self.showMaximized()
-        self._apply_styles()
-        self._connect_signals()
-        self._connect_session_signals()
-        self._update_control_states()
-
         self._restart_after_stop = False
         self._clear_video_after_stop = False
         self._ignore_result_frames = False
 
-    def _build_ui(self):
-        central = QWidget()
-        self.setCentralWidget(central)
+        self._build_ui()
+        self._connect_signals()
+        self._connect_session_signals()
+        self._update_control_states()
 
-        root_layout = QHBoxLayout(central)
+    def _build_ui(self):
+        root_layout = QHBoxLayout(self)
         root_layout.setContentsMargins(16, 16, 16, 16)
         root_layout.setSpacing(16)
 
@@ -94,9 +81,6 @@ class MainWindow(QMainWindow):
         root_layout.addLayout(left_layout, 1)
         root_layout.addWidget(right_panel)
 
-    def _apply_styles(self):
-        self.setStyleSheet(MAIN_WINDOW_STYLE)
-
     def _connect_signals(self):
         self.source_group.open_video_button.clicked.connect(self._choose_video)
         self.control_group.analysis_toggle_button.clicked.connect(self._toggle_analysis)
@@ -104,7 +88,6 @@ class MainWindow(QMainWindow):
         self.control_group.capture_button.clicked.connect(self._capture_frame)
 
         self.settings_group.conf_slider.valueChanged.connect(self._on_conf_changed)
-
         self.classes_group.selection_changed.connect(self._on_class_selection_changed)
 
     def _connect_session_signals(self):
@@ -154,9 +137,7 @@ class MainWindow(QMainWindow):
 
         if self.analysis_session.is_running():
             self._restart_after_stop = True
-            self.status_group.set_status(
-                "Выбрано новое видео, завершение текущего сеанса..."
-            )
+            self.status_group.set_status("Выбрано новое видео, завершение текущего сеанса...")
             self.analysis_session.stop()
             return
 
@@ -209,6 +190,12 @@ class MainWindow(QMainWindow):
 
         self._ignore_result_frames = False
         self._update_control_states()
+
+        if self._restart_after_stop:
+            self._restart_after_stop = False
+            self.status_group.set_status("Запуск нового видео")
+            self.analysis_session.start()
+            return
 
         if self.status_group.status_label.text() not in (
             "Ошибка",
