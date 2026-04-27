@@ -10,10 +10,6 @@ from app.domain.entities import (
 
 
 class ModelConfigService:
-    """
-    Сервис для загрузки конфигурации ONNX-модели
-    """
-
     REQUIRED_FIELDS = [
         "model_name",
         "model_path",
@@ -38,7 +34,11 @@ class ModelConfigService:
 
     REQUIRED_OUTPUT_FIELDS = ["output_names", "format"]
 
-    REQUIRED_POSTPROCESS_FIELDS = ["max_detections"]
+    REQUIRED_POSTPROCESS_FIELDS = [
+        "confidence_threshold",
+        "iou_threshold",
+        "max_detections",
+    ]
 
     @staticmethod
     def load_model_config(config_path: str | Path) -> ModelConfig:
@@ -118,3 +118,21 @@ class ModelConfigService:
 
         if not isinstance(data["classes"], list) or not data["classes"]:
             raise ValueError("Поле 'classes' должно быть непустым списком")
+
+        confidence_threshold = float(data["postprocess"]["confidence_threshold"])
+        if not 0.0 <= confidence_threshold <= 1.0:
+            raise ValueError(
+                "В блоке postprocess поле 'confidence_threshold' должно быть в диапазоне [0, 1]"
+            )
+
+        iou_threshold = float(data["postprocess"]["iou_threshold"])
+        if not 0.0 <= iou_threshold <= 1.0:
+            raise ValueError(
+                "В блоке postprocess поле 'iou_threshold' должно быть в диапазоне [0, 1]"
+            )
+
+        max_detections = int(data["postprocess"]["max_detections"])
+        if max_detections < 1:
+            raise ValueError(
+                "В блоке postprocess поле 'max_detections' должно быть >= 1"
+            )

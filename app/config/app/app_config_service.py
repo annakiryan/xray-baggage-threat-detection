@@ -8,12 +8,15 @@ class ConfigService:
     REQUIRED_FIELDS = [
         "app_name",
         "models_dir",
+        "model_config",
+        "videos_dir",
         "default_video",
         "logs_dir",
         "results_dir",
         "default_confidence_threshold",
         "default_iou_threshold",
         "default_frame_skip",
+        "device",
     ]
 
     @staticmethod
@@ -34,6 +37,8 @@ class ConfigService:
         return AppConfig(
             app_name=data["app_name"],
             models_dir=data["models_dir"],
+            model_config=data["model_config"],
+            videos_dir=data["videos_dir"],
             default_video=data["default_video"],
             logs_dir=data["logs_dir"],
             results_dir=data["results_dir"],
@@ -75,6 +80,15 @@ class ConfigService:
             raise ValueError("Поле 'models_dir' должно быть непустой строкой")
 
         if (
+            not isinstance(data["model_config"], str)
+            or not data["model_config"].strip()
+        ):
+            raise ValueError("Поле 'model_config' должно быть непустой строкой")
+
+        if not isinstance(data["videos_dir"], str) or not data["videos_dir"].strip():
+            raise ValueError("Поле 'videos_dir' должно быть непустой строкой")
+
+        if (
             not isinstance(data["default_video"], str)
             or not data["default_video"].strip()
         ):
@@ -98,3 +112,9 @@ class ConfigService:
 
         if int(data["default_frame_skip"]) < 1:
             raise ValueError("Поле 'default_frame_skip' должно быть >= 1")
+
+        if not isinstance(data["device"], str) or not data["device"].strip():
+            raise ValueError("Поле 'device' должно быть непустой строкой")
+
+        if data["device"].lower() not in {"cpu", "cuda"}:
+            raise ValueError("Поле 'device' должно быть 'cpu' или 'cuda'")

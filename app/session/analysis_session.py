@@ -1,15 +1,24 @@
 from pathlib import Path
 from threading import Thread
 from typing import Optional
+from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal
 
 from app.domain.entities import FrameResult, ModelConfig
+from app.domain.settings import DrawingSettings, InferenceSettings, StorageSettings
 from app.logging import LoggerService
-from app.processing.worker import VideoProcessingWorker
+from app.processing.video_processing_worker import VideoProcessingWorker
 from app.video.capture_service import CaptureService
-from app.session.session_results_service import SessionResultsService
+from app.session.session_results_service import SessionResultsService, SessionStructure
 from app.processing.detection_event_manager import DetectionEventManager
+from app.processing.drawing import hex_to_bgr
+
+
+@dataclass
+class CurrentSessionArtifacts:
+    session: SessionStructure
+    detection_event_manager: DetectionEventManager
 
 
 class AnalysisSession(QObject):
@@ -22,28 +31,28 @@ class AnalysisSession(QObject):
 
     def __init__(
         self,
-        default_video: str,
-        logs_dir: str,
-        results_dir: str,
         model_config: ModelConfig,
-        device: str = "cpu",
-        confidence_threshold: float = 0.4,
-        iou_threshold: float = 0.5,
-        frame_skip: int = 1,
-        draw_enabled: bool = True,
+        storage_settings: StorageSettings,
+        inference_settings: InferenceSettings | None = None,
+        drawing_settings: DrawingSettings | None = None,
     ):
         super().__init__()
 
         self.model_config = model_config
-        self.device = device
-        self.confidence_threshold = float(confidence_threshold)
-        self.iou_threshold = float(iou_threshold)
-        self.frame_skip = max(1, int(frame_skip))
-        self.draw_enabled = bool(draw_enabled)
+        self.storage_settings = storage_settings
+        self.inference_settings = inference_settings or InferenceSettings()
+        self.drawing_settings = drawing_settings or DrawingSettings()
+        self.device = self.inference_settings.device
+        self.confidence_threshold = self.inference_settings.confidence_threshold
+        self.iou_threshold = self.inference_settings.iou_threshold
+        self.frame_skip = self.inference_settings.frame_skip
+        self.draw_enabled = self.drawing_settings.enabled
         self.enabled_class_ids = set(range(len(self.model_config.classes)))
+        self.box_color = self.drawing_settings.box_color
+        self.box_thickness = self.drawing_settings.box_thickness
 
-        self.video_path: Optional[str] = default_video
-        self.results_dir = results_dir
+        self.video_path: Optional[Path] = self.storage_settings.default_video_path
+        self.results_dir = self.storage_settings.results_dir
 
         self._worker: Optional[VideoProcessingWorker] = None
         self._thread: Optional[Thread] = None
@@ -53,22 +62,17 @@ class AnalysisSession(QObject):
 
         self.logger = LoggerService.get_logger(
             self.__class__.__name__,
-            logs_dir=logs_dir,
+            logs_dir=self.storage_settings.logs_dir,
         )
 
-        self.session_dir: Optional[Path] = None
-        self.detections_dir: Optional[Path] = None
-        self.manual_captures_dir: Optional[Path] = None
-        self.summary_path: Optional[Path] = None
-        self.session_summary = None
+        self.current_artifacts: Optional[CurrentSessionArtifacts] = None
 
-        self.detection_event_manager: Optional[DetectionEventManager] = None
-
-    def set_video_path(self, video_path: str) -> None:
-        self.video_path = video_path
+    def set_video_path(self, video_path: str | Path) -> None:
+        self.video_path = Path(video_path)
 
     def set_confidence_threshold(self, value: float) -> None:
         self.confidence_threshold = float(value)
+        self.inference_settings.confidence_threshold = self.confidence_threshold
         if self._worker is not None:
             self._worker.set_confidence_threshold(value)
         self.logger.info(
@@ -86,6 +90,23 @@ class AnalysisSession(QObject):
             sorted(self.enabled_class_ids),
         )
 
+    def set_bbox_color(self, color: tuple[int, int, int]) -> None:
+        self.box_color = color
+        self.drawing_settings.box_color = color
+
+        if self._worker is not None:
+            self._worker.set_box_color(color)
+
+    def set_bbox_color_hex(self, color_hex: str) -> None:
+        self.set_bbox_color(hex_to_bgr(color_hex))
+
+    def set_bbox_thickness(self, thickness: int) -> None:
+        self.box_thickness = max(1, int(thickness))
+        self.drawing_settings.box_thickness = self.box_thickness
+
+        if self._worker is not None:
+            self._worker.set_box_thickness(self.box_thickness)
+
     def get_enabled_class_ids(self) -> set[int]:
         return set(self.enabled_class_ids)
 
@@ -100,42 +121,24 @@ class AnalysisSession(QObject):
             self.status_changed.emit("Сеанс анализа уже запущен")
             return
 
-        if not self.video_path:
+        if self.video_path is None:
             self._emit_error("Не указан путь к видео")
             return
 
-        if not Path(self.video_path).exists():
+        if not self.video_path.exists():
             self._emit_error(f"Видео не найдено: {self.video_path}")
             return
 
-        session_data = SessionResultsService.create_session_structure(
-            results_dir=self.results_dir,
-            video_path=self.video_path,
-        )
-
-        self.session_dir = session_data["session_dir"]
-        self.detections_dir = session_data["detections_dir"]
-        self.manual_captures_dir = session_data["manual_captures_dir"]
-        self.summary_path = session_data["summary_path"]
-        self.session_summary = session_data["summary"]
-
-        self.detection_event_manager = DetectionEventManager(
-            session_summary=self.session_summary,
-            summary_path=self.summary_path,
-            detections_dir=self.detections_dir,
-        )
+        self.current_artifacts = self._create_session_artifacts()
 
         self._worker = VideoProcessingWorker(
             model_config=self.model_config,
-            device=self.device,
-            confidence_threshold=self.confidence_threshold,
-            iou_threshold=self.iou_threshold,
-            process_every_n_frames=self.frame_skip,
-            draw_enabled=self.draw_enabled,
+            inference_settings=self.inference_settings,
+            drawing_settings=self.drawing_settings,
             on_result_ready=self._handle_result_ready,
             on_status_changed=self._handle_status_changed,
             on_error=self._handle_error_occurred,
-            on_finished=self._on_worker_finished,
+            on_finished=self._handle_worker_finished,
         )
 
         self._worker.set_video_path(self.video_path)
@@ -176,16 +179,17 @@ class AnalysisSession(QObject):
         if frame is None:
             raise ValueError("Нет кадра для сохранения")
 
-        target_dir = self.manual_captures_dir or Path(self.results_dir)
+        if self.current_artifacts is None:
+            raise RuntimeError("Сеанс анализа не запущен")
 
         return CaptureService.save_frame(
             frame=frame,
-            results_dir=str(target_dir),
+            results_dir=str(self.current_artifacts.session.manual_captures_dir),
         )
 
     def _handle_result_ready(self, result: FrameResult) -> None:
-        if self.detection_event_manager is not None:
-            self.detection_event_manager.process_frame_result(result)
+        if self.current_artifacts is not None:
+            self.current_artifacts.detection_event_manager.process_frame_result(result)
 
         self.result_ready.emit(result)
 
@@ -193,31 +197,65 @@ class AnalysisSession(QObject):
         self.status_changed.emit(text)
 
     def _handle_error_occurred(self, message: str) -> None:
-        self.logger.error("Ошибка: %s", message)
-        self.error_occurred.emit(message)
+        self._report_error(message)
 
     def _emit_error(self, message: str) -> None:
+        self._report_error(message)
+
+    def _report_error(self, message: str) -> None:
         self.logger.error("Ошибка: %s", message)
         self.error_occurred.emit(message)
 
-    def _on_worker_finished(self) -> None:
-        if self.session_summary is not None and self.summary_path is not None:
+    def _handle_worker_finished(self) -> None:
+        if self.current_artifacts is not None:
             SessionResultsService.finalize_summary(
-                summary=self.session_summary,
-                summary_path=self.summary_path,
+                summary=self.current_artifacts.session.summary,
+                summary_path=self.current_artifacts.session.summary_path,
             )
 
         self._worker = None
         self._thread = None
         self._is_running = False
         self._is_paused = False
-
-        self.session_dir = None
-        self.detections_dir = None
-        self.manual_captures_dir = None
-        self.summary_path = None
-        self.session_summary = None
-        self.detection_event_manager = None
+        self.current_artifacts = None
 
         self.logger.info("Сеанс анализа завершён")
         self.session_finished.emit()
+
+    def _create_session_artifacts(self) -> CurrentSessionArtifacts:
+        if self.video_path is None:
+            raise RuntimeError("Не указан путь к видео")
+
+        session_structure = SessionResultsService.create_session_structure(
+            results_dir=self.results_dir,
+            video_path=self.video_path,
+        )
+
+        detection_event_manager = DetectionEventManager(
+            session_summary=session_structure.summary,
+            summary_path=session_structure.summary_path,
+            detections_dir=session_structure.detections_dir,
+        )
+
+        return CurrentSessionArtifacts(
+            session=session_structure,
+            detection_event_manager=detection_event_manager,
+        )
+
+    def change_video_path(self, video_path: str | Path) -> None:
+        new_video_path = Path(video_path)
+
+        if self.video_path is not None:
+            try:
+                if self.video_path.resolve() == new_video_path.resolve():
+                    return
+            except OSError:
+                if self.video_path == new_video_path:
+                    return
+
+        if self._is_running and self._worker is not None:
+            self.logger.info("Запрошено завершение сеанса из-за смены видео")
+            self._worker.stop()
+            self._is_paused = False
+
+        self.video_path = new_video_path

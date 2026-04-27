@@ -1,9 +1,11 @@
 import time
+import traceback
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 from typing import Callable, Optional
 
 from app.domain.entities import FrameResult, ModelConfig
+from app.domain.settings import DrawingSettings, InferenceSettings
 from app.processing.frame_processor import FrameProcessor
 from app.video.video_source import VideoSource
 
@@ -12,22 +14,16 @@ class VideoProcessingWorker:
     def __init__(
         self,
         model_config: ModelConfig,
-        device: str = "cpu",
-        confidence_threshold: float = 0.4,
-        iou_threshold: float = 0.5,
-        process_every_n_frames: int = 1,
-        draw_enabled: bool = True,
+        inference_settings: InferenceSettings,
+        drawing_settings: DrawingSettings,
         on_result_ready: Optional[Callable[[FrameResult], None]] = None,
         on_status_changed: Optional[Callable[[str], None]] = None,
         on_error: Optional[Callable[[str], None]] = None,
         on_finished: Optional[Callable[[], None]] = None,
     ):
         self.model_config = model_config
-        self.device = device
-        self.confidence_threshold = float(confidence_threshold)
-        self.iou_threshold = float(iou_threshold)
-        self.process_every_n_frames = max(1, int(process_every_n_frames))
-        self.draw_enabled = bool(draw_enabled)
+        self.inference_settings = inference_settings
+        self.drawing_settings = drawing_settings
 
         self.on_result_ready = on_result_ready
         self.on_status_changed = on_status_changed
@@ -43,32 +39,51 @@ class VideoProcessingWorker:
         self._running = False
         self._pause_event = Event()
         self._stop_event = Event()
+        self._settings_lock = Lock()
 
         self._frame_index = 0
         self._last_result: Optional[FrameResult] = None
 
-    def set_video_path(self, video_path: str) -> None:
-        self.video_path = video_path
+    def set_video_path(self, video_path: str | Path) -> None:
+        self.video_path = str(video_path)
 
     def set_confidence_threshold(self, value: float) -> None:
-        self.confidence_threshold = float(value)
-        if self.frame_processor is not None:
-            self.frame_processor.set_confidence_threshold(value)
+        with self._settings_lock:
+            self.inference_settings.confidence_threshold = float(value)
+            if self.frame_processor is not None:
+                self.frame_processor.set_confidence_threshold(value)
 
     def set_iou_threshold(self, value: float) -> None:
-        self.iou_threshold = float(value)
-        if self.frame_processor is not None:
-            self.frame_processor.set_iou_threshold(value)
+        with self._settings_lock:
+            self.inference_settings.iou_threshold = float(value)
+            if self.frame_processor is not None:
+                self.frame_processor.set_iou_threshold(value)
 
     def set_draw_enabled(self, enabled: bool) -> None:
-        self.draw_enabled = bool(enabled)
-        if self.frame_processor is not None:
-            self.frame_processor.set_draw_enabled(enabled)
+        with self._settings_lock:
+            self.drawing_settings.enabled = bool(enabled)
+            if self.frame_processor is not None:
+                self.frame_processor.set_draw_enabled(enabled)
 
     def set_enabled_class_ids(self, class_ids: set[int]) -> None:
-        self.enabled_class_ids = set(class_ids)
-        if self.frame_processor is not None:
-            self.frame_processor.set_enabled_class_ids(class_ids)
+        with self._settings_lock:
+            self.enabled_class_ids = set(class_ids)
+            if self.frame_processor is not None:
+                self.frame_processor.set_enabled_class_ids(class_ids)
+
+    def set_box_color(self, color: tuple[int, int, int]) -> None:
+        with self._settings_lock:
+            self.drawing_settings.box_color = color
+            if self.frame_processor is not None:
+                self.frame_processor.set_box_color(color)
+
+    def set_box_thickness(self, thickness: int) -> None:
+        with self._settings_lock:
+            self.drawing_settings.box_thickness = max(1, int(thickness))
+            if self.frame_processor is not None:
+                self.frame_processor.set_box_thickness(
+                    self.drawing_settings.box_thickness
+                )
 
     def pause(self) -> None:
         if not self._running:
@@ -101,7 +116,8 @@ class VideoProcessingWorker:
             self._prepare_run()
             self._run_loop()
         except Exception as e:
-            self._emit_error(str(e))
+            error_text = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+            self._emit_error(error_text)
         finally:
             self._cleanup()
             self._emit_finished()
@@ -124,10 +140,8 @@ class VideoProcessingWorker:
 
         self.frame_processor = FrameProcessor(
             model_config=self.model_config,
-            device=self.device,
-            confidence_threshold=self.confidence_threshold,
-            iou_threshold=self.iou_threshold,
-            draw_enabled=self.draw_enabled,
+            inference_settings=self.inference_settings,
+            drawing_settings=self.drawing_settings,
         )
         self.frame_processor.set_enabled_class_ids(self.enabled_class_ids)
 
@@ -176,21 +190,24 @@ class VideoProcessingWorker:
     def _process_frame(self, frame) -> FrameResult:
         assert self.frame_processor is not None
 
-        should_run_inference = self._frame_index % self.process_every_n_frames == 0
-
-        if should_run_inference:
-            result = self.frame_processor.process_frame(frame)
-            self._last_result = result
-            return result
-
-        if self._last_result is not None:
-            return self.frame_processor.draw_existing_detections(
-                frame=frame,
-                detections=self._last_result.detections,
-                inference_time_ms=self._last_result.inference_time_ms,
+        with self._settings_lock:
+            should_run_inference = (
+                self._frame_index % self.inference_settings.frame_skip == 0
             )
 
-        return self.frame_processor.process_frame_without_drawing(frame)
+            if should_run_inference:
+                result = self.frame_processor.process_frame(frame)
+                self._last_result = result
+                return result
+
+            if self._last_result is not None:
+                return self.frame_processor.draw_existing_detections(
+                    frame=frame,
+                    detections=self._last_result.detections,
+                    inference_time_ms=self._last_result.inference_time_ms,
+                )
+
+            return self.frame_processor.process_frame_without_drawing(frame)
 
     def _cleanup(self) -> None:
         if self.video_source is not None:

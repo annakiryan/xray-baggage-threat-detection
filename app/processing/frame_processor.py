@@ -4,27 +4,26 @@ from typing import Any, Optional
 import numpy as np
 
 from app.domain.entities import Detection, FrameResult, ModelConfig
+from app.domain.settings import DrawingSettings, InferenceSettings
 from app.inference.detector import OnnxDetector
 from app.inference.postprocess import get_postprocessor
-from app.processing.drawing import draw_all
+from app.processing.drawing import DEFAULT_BOX_COLOR, draw_all
 
 
 class FrameProcessor:
     def __init__(
         self,
         model_config: ModelConfig,
-        device: str = "cpu",
-        confidence_threshold: float = 0.4,
-        iou_threshold: float = 0.5,
-        draw_enabled: bool = True,
+        inference_settings: InferenceSettings | None = None,
+        drawing_settings: DrawingSettings | None = None,
         detector: Optional[OnnxDetector] = None,
         postprocessor: Optional[Any] = None,
     ):
         self.model_config = model_config
-        self.device = device
-        self.confidence_threshold = float(confidence_threshold)
-        self.iou_threshold = float(iou_threshold)
-        self.draw_enabled = bool(draw_enabled)
+        self.inference_settings = inference_settings or InferenceSettings()
+        self.drawing_settings = drawing_settings or DrawingSettings(
+            box_color=DEFAULT_BOX_COLOR
+        )
 
         self.enabled_class_ids = set(range(len(self.model_config.classes)))
 
@@ -38,13 +37,19 @@ class FrameProcessor:
         self.enabled_class_ids = set(class_ids)
 
     def set_confidence_threshold(self, value: float) -> None:
-        self.confidence_threshold = float(value)
+        self.inference_settings.confidence_threshold = float(value)
 
     def set_iou_threshold(self, value: float) -> None:
-        self.iou_threshold = float(value)
+        self.inference_settings.iou_threshold = float(value)
 
     def set_draw_enabled(self, enabled: bool) -> None:
-        self.draw_enabled = bool(enabled)
+        self.drawing_settings.enabled = bool(enabled)
+
+    def set_box_color(self, color: tuple[int, int, int]) -> None:
+        self.drawing_settings.box_color = color
+
+    def set_box_thickness(self, thickness: int) -> None:
+        self.drawing_settings.box_thickness = max(1, int(thickness))
 
     def process_frame(self, frame: np.ndarray) -> FrameResult:
         self._validate_frame(frame)
@@ -120,6 +125,30 @@ class FrameProcessor:
             "runtime": self.detector.get_runtime_info(),
         }
 
+    @property
+    def device(self) -> str:
+        return self.inference_settings.device
+
+    @property
+    def confidence_threshold(self) -> float:
+        return self.inference_settings.confidence_threshold
+
+    @property
+    def iou_threshold(self) -> float:
+        return self.inference_settings.iou_threshold
+
+    @property
+    def draw_enabled(self) -> bool:
+        return self.drawing_settings.enabled
+
+    @property
+    def box_color(self) -> tuple[int, int, int]:
+        return self.drawing_settings.box_color
+
+    @property
+    def box_thickness(self) -> int:
+        return self.drawing_settings.box_thickness
+
     def _run_detection(self, frame: np.ndarray) -> tuple[list[Detection], float]:
         infer_start = time.perf_counter()
         raw_outputs, preprocess_meta = self.detector.predict_raw(frame)
@@ -161,6 +190,8 @@ class FrameProcessor:
             fps=fps,
             inference_time_ms=inference_time_ms,
             device=self.device,
+            box_color=self.box_color,
+            box_thickness=self.box_thickness,
         )
 
     @staticmethod

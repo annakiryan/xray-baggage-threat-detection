@@ -55,7 +55,13 @@ class CaptureService:
             f"Дата и время: {timestamp_for_text}",
         )
 
-        save_path = results_path / f"{timestamp_for_filename}.jpg"
+        normalized_prefix = file_prefix.strip()
+        filename = (
+            f"{normalized_prefix}_{timestamp_for_filename}.jpg"
+            if normalized_prefix
+            else f"{timestamp_for_filename}.jpg"
+        )
+        save_path = results_path / filename
 
         ok = cv2.imwrite(str(save_path), frame_with_timestamp)
         if not ok:

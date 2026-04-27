@@ -8,8 +8,24 @@ from PIL import Image, ImageDraw, ImageFont
 from app.domain.entities import Detection
 
 
-DEFAULT_BOX_COLOR = (0, 255, 0)
-DEFAULT_TEXT_COLOR_ON_BOX = (0, 0, 0)
+DEFAULT_BOX_COLOR = (228, 107, 43)
+DEFAULT_TEXT_COLOR_ON_BOX = (255, 255, 255)
+
+
+def hex_to_bgr(color_hex: str) -> tuple[int, int, int]:
+    color_hex = color_hex.strip().lstrip("#")
+
+    if len(color_hex) != 6:
+        return DEFAULT_BOX_COLOR
+
+    try:
+        r = int(color_hex[0:2], 16)
+        g = int(color_hex[2:4], 16)
+        b = int(color_hex[4:6], 16)
+    except ValueError:
+        return DEFAULT_BOX_COLOR
+
+    return b, g, r
 
 
 def draw_all(
@@ -19,9 +35,17 @@ def draw_all(
     fps: float | None = None,
     inference_time_ms: float | None = None,
     device: str | None = None,
+    box_color: tuple[int, int, int] = DEFAULT_BOX_COLOR,
+    box_thickness: int = 2,
 ) -> np.ndarray:
     _validate_frame(frame)
-    return draw_detections(frame, detections)
+
+    return draw_detections(
+        frame=frame,
+        detections=detections,
+        box_color=box_color,
+        box_thickness=box_thickness,
+    )
 
 
 def draw_detections(

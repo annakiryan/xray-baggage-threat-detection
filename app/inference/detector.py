@@ -134,9 +134,7 @@ class OnnxDetector:
 
         if input_cfg.color_format.lower() == "rgb":
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        elif input_cfg.color_format.lower() == "bgr":
-            pass
-        else:
+        elif input_cfg.color_format.lower() != "bgr":
             raise ValueError(f"Неподдерживаемый color_format: {input_cfg.color_format}")
 
         image = image.astype(np.float32)

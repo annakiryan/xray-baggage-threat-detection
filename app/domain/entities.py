@@ -26,6 +26,8 @@ class FrameResult:
 class AppConfig:
     app_name: str
     models_dir: str
+    model_config: str
+    videos_dir: str
     default_video: str
     logs_dir: str
     results_dir: str

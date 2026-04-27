@@ -29,6 +29,7 @@ class DetrPostprocessor(BasePostprocessor):
         original_height: int,
         confidence_threshold: float,
         iou_threshold: float,
+        preprocess_meta: dict | None = None,
     ) -> List[Detection]:
         raise NotImplementedError(
             "DETR postprocessing пока не реализован. "

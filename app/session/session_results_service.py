@@ -1,18 +1,27 @@
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-import cv2
 
 from app.domain.entities import DetectionEvent, SessionSummary
 from app.video.capture_service import CaptureService
 
 
+@dataclass(frozen=True)
+class SessionStructure:
+    session_dir: Path
+    detections_dir: Path
+    manual_captures_dir: Path
+    summary_path: Path
+    summary: SessionSummary
+
+
 class SessionResultsService:
     @staticmethod
     def create_session_structure(
-        results_dir: str, video_path: str
-    ) -> dict[str, Path | SessionSummary]:
+        results_dir: str | Path,
+        video_path: str | Path,
+    ) -> SessionStructure:
         base_results_dir = Path(results_dir)
         base_results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -30,19 +39,19 @@ class SessionResultsService:
 
         summary = SessionSummary(
             session_id=session_id,
-            video_path=video_path,
+            video_path=str(video_path),
             started_at=now.strftime("%Y-%m-%d %H:%M:%S"),
         )
 
         SessionResultsService.save_summary(summary, summary_path)
 
-        return {
-            "session_dir": session_dir,
-            "detections_dir": detections_dir,
-            "manual_captures_dir": manual_captures_dir,
-            "summary_path": summary_path,
-            "summary": summary,
-        }
+        return SessionStructure(
+            session_dir=session_dir,
+            detections_dir=detections_dir,
+            manual_captures_dir=manual_captures_dir,
+            summary_path=summary_path,
+            summary=summary,
+        )
 
     @staticmethod
     def save_summary(summary: SessionSummary, summary_path: str | Path) -> None:

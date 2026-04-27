@@ -5,7 +5,6 @@ import cv2
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
-    QFileDialog,
     QHBoxLayout,
     QMessageBox,
     QVBoxLayout,
@@ -25,19 +24,25 @@ from app.ui.analysis.widgets import (
 
 
 class AnalysisPage(QWidget):
-    def __init__(self, session: AnalysisSession):
+    def __init__(
+        self,
+        session: AnalysisSession,
+        available_videos: list[Path],
+        default_video: str,
+    ):
         super().__init__()
 
         self.analysis_session = session
+        self.available_videos = available_videos
+        self.default_video = default_video
 
         self.model_config = session.model_config
         self.default_confidence_threshold = session.confidence_threshold
 
-        self.video_path: Optional[str] = session.video_path
+        self.video_path: Optional[Path] = session.video_path
         self.current_display_frame = None
 
-        self._restart_after_stop = False
-        self._clear_video_after_stop = False
+        self._clear_video_after_stop = True
         self._ignore_result_frames = False
 
         self._build_ui()
@@ -51,6 +56,7 @@ class AnalysisPage(QWidget):
         root_layout.setSpacing(16)
 
         left_layout = QVBoxLayout()
+
         self.video_label = QLabel()
         self.video_label.setAlignment(Qt.AlignCenter)
         self.video_label.setMinimumSize(920, 680)
@@ -63,11 +69,17 @@ class AnalysisPage(QWidget):
         right_layout = QVBoxLayout(right_panel)
         right_layout.setSpacing(14)
 
-        self.source_group = SourceGroup()
+        self.source_group = SourceGroup(
+            videos=self.available_videos,
+            default_video=self.default_video,
+        )
+
         self.control_group = ControlGroup()
+
         self.settings_group = SettingsGroup(
             confidence_threshold=self.default_confidence_threshold,
         )
+
         self.classes_group = ClassesGroup(self.model_config.classes)
         self.status_group = StatusGroup()
 
@@ -81,8 +93,12 @@ class AnalysisPage(QWidget):
         root_layout.addLayout(left_layout, 1)
         root_layout.addWidget(right_panel)
 
+        selected_video = self.source_group.selected_video_path()
+        if selected_video:
+            self._on_video_selected(selected_video)  
+
     def _connect_signals(self):
-        self.source_group.open_video_button.clicked.connect(self._choose_video)
+        self.source_group.video_selected.connect(self._on_video_selected)
         self.control_group.analysis_toggle_button.clicked.connect(self._toggle_analysis)
         self.control_group.pause_toggle_button.clicked.connect(self._toggle_pause)
         self.control_group.capture_button.clicked.connect(self._capture_frame)
@@ -120,29 +136,6 @@ class AnalysisPage(QWidget):
             self.control_group.capture_button.setEnabled(
                 self.current_display_frame is not None
             )
-
-    def _choose_video(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Выберите видео",
-            str(Path.cwd()),
-            "Video Files (*.mp4 *.avi *.mov *.mkv)",
-        )
-
-        if not file_path:
-            return
-
-        self.video_path = file_path
-        self.analysis_session.set_video_path(file_path)
-
-        if self.analysis_session.is_running():
-            self._restart_after_stop = True
-            self.status_group.set_status("Выбрано новое видео, завершение текущего сеанса...")
-            self.analysis_session.stop()
-            return
-
-        self.status_group.set_status("Видео выбрано")
-        self._update_control_states()
 
     def _toggle_analysis(self):
         if self.analysis_session.is_running():
@@ -183,6 +176,11 @@ class AnalysisPage(QWidget):
     def _on_session_started(self):
         self._update_control_states()
 
+    def _on_video_selected(self, video_path: Path) -> None:
+        self.video_path = video_path
+        self.analysis_session.change_video_path(video_path)
+        self._update_control_states()
+
     def _on_session_finished(self):
         if self._clear_video_after_stop:
             self._clear_video_after_stop = False
@@ -190,12 +188,6 @@ class AnalysisPage(QWidget):
 
         self._ignore_result_frames = False
         self._update_control_states()
-
-        if self._restart_after_stop:
-            self._restart_after_stop = False
-            self.status_group.set_status("Запуск нового видео")
-            self.analysis_session.start()
-            return
 
         if self.status_group.status_label.text() not in (
             "Ошибка",

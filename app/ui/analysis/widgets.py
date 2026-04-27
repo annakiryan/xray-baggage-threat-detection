@@ -1,8 +1,7 @@
+from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QFormLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -10,18 +9,67 @@ from PySide6.QtWidgets import (
     QSlider,
     QVBoxLayout,
     QWidget,
+    QGroupBox,
+    QFormLayout,
+    QComboBox,
 )
 
 
 class SourceGroup(QGroupBox):
-    def __init__(self):
-        super().__init__("Источник данных")
+    video_selected = Signal(object)
 
-        self.open_video_button = QPushButton("Открыть видео")
+    def __init__(
+        self,
+        videos: list[Path],
+        default_video: str | Path | None = None,
+    ):
+        super().__init__("Источник видео")
 
-        form = QFormLayout()
-        form.addRow(self.open_video_button)
-        self.setLayout(form)
+        self.videos = videos
+
+        self.video_combo = QComboBox()
+        self.video_combo.setObjectName("videoCombo")
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Видео"))
+        layout.addWidget(self.video_combo)
+
+        self._fill_videos(default_video)
+
+        self.video_combo.currentIndexChanged.connect(self._on_video_changed)
+
+    def _fill_videos(self, default_video: str | Path | None) -> None:
+        self.video_combo.blockSignals(True)
+        self.video_combo.clear()
+
+        if not self.videos:
+            self.video_combo.addItem("Видео не найдены", "")
+            self.video_combo.setEnabled(False)
+            self.video_combo.blockSignals(False)
+            return
+
+        default_name = Path(default_video).name.lower() if default_video else None
+        default_index = 0
+
+        for index, video_path in enumerate(self.videos):
+            video_path = Path(video_path)
+            self.video_combo.addItem(video_path.name, str(video_path.resolve()))
+
+            if default_name and video_path.name.lower() == default_name:
+                default_index = index
+
+        self.video_combo.setCurrentIndex(default_index)
+        self.video_combo.blockSignals(False)
+
+    def _on_video_changed(self, index: int) -> None:
+        video_path = self.video_combo.itemData(index)
+
+        if video_path:
+            self.video_selected.emit(Path(video_path))
+
+    def selected_video_path(self) -> Path | None:
+        value = self.video_combo.currentData()
+        return Path(value) if value else None
 
 
 class ControlGroup(QGroupBox):
@@ -120,11 +168,23 @@ class StatusGroup(QGroupBox):
     def __init__(self):
         super().__init__("Статус системы")
 
+        self.status_dot = QLabel("●")
+        self.status_dot.setObjectName("statusDot")
+        self.status_dot.setFixedWidth(14)
+
         self.status_label = QLabel("Ожидание")
         self.detections_label = QLabel("0")
 
+        status_widget = QWidget()
+        status_layout = QHBoxLayout(status_widget)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(6)
+        status_layout.addWidget(self.status_dot)
+        status_layout.addWidget(self.status_label)
+        status_layout.addStretch()
+
         form = QFormLayout()
-        form.addRow("Состояние:", self.status_label)
+        form.addRow("Состояние:", status_widget)
         form.addRow("Детекций:", self.detections_label)
         self.setLayout(form)
 
@@ -136,3 +196,21 @@ class StatusGroup(QGroupBox):
 
     def set_status(self, text: str) -> None:
         self.status_label.setText(text)
+        self.status_dot.setStyleSheet(f"color: {self._get_status_color(text)};")
+
+    def _get_status_color(self, text: str) -> str:
+        normalized = text.lower()
+
+        if "ошибка" in normalized:
+            return "#F85149"
+
+        if normalized in ("идёт анализ", "обработка продолжена"):
+            return "#3FB950"
+
+        if normalized in ("ожидание", "готово", "видео выбрано"):
+            return "#8F9AAA"
+
+        if "пауза" in normalized or "приостанов" in normalized:
+            return "#D29922"
+
+        return "#8F9AAA"

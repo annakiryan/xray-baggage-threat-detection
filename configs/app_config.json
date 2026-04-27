@@ -1,7 +1,9 @@
 {
   "app_name": "XRay Dangerous Object Detection",
   "models_dir": "models",
-  "default_video": "data/videos/video.mp4",
+  "model_config": "xray_yolo10n/config.json",
+  "videos_dir": "data/videos",
+  "default_video": "video.mp4",
   "logs_dir": "logs",
   "results_dir": "results",
   "default_confidence_threshold": 0.8,

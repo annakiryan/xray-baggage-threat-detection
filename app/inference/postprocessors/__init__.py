@@ -12,5 +12,6 @@ class BasePostprocessor(ABC):
         original_height: int,
         confidence_threshold: float,
         iou_threshold: float,
+        preprocess_meta: dict | None = None,
     ) -> List[Detection]:
         pass
