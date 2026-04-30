@@ -97,14 +97,18 @@ class AppFactoryTests(unittest.TestCase):
 
             with (
                 patch("app.app_factory.APP_CONFIG_PATH", app_config_path),
-                patch("app.app_factory.INTERFACE_SETTINGS_PATH", interface_settings_path),
+                patch(
+                    "app.app_factory.INTERFACE_SETTINGS_PATH", interface_settings_path
+                ),
                 patch("app.app_factory.THEME_PALETTES_PATH", theme_palettes_path),
             ):
                 deps = build_dependencies()
 
             self.assertEqual(deps.app_config.app_name, "Test app")
             self.assertEqual(deps.default_video_path, videos_dir / "demo.mp4")
-            self.assertEqual([path.name for path in deps.available_videos], ["demo.mp4"])
+            self.assertEqual(
+                [path.name for path in deps.available_videos], ["demo.mp4"]
+            )
             self.assertEqual(deps.model_config.model_name, "dummy")
             self.assertEqual(deps.interface_settings.ui_scale, 110)
             self.assertEqual(deps.theme_manager.get_palette("dark")["name"], "Dark")

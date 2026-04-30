@@ -5,7 +5,7 @@
   "videos_dir": "data/videos",
   "default_video": "video.mp4",
   "logs_dir": "logs",
-  "results_dir": "results",
+  "results_dir": "data/results",
   "default_confidence_threshold": 0.8,
   "default_iou_threshold": 0.2,
   "default_frame_skip": 1,

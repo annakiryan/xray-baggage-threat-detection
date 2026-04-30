@@ -95,7 +95,7 @@ class AnalysisPage(QWidget):
 
         selected_video = self.source_group.selected_video_path()
         if selected_video:
-            self._on_video_selected(selected_video)  
+            self._on_video_selected(selected_video)
 
     def _connect_signals(self):
         self.source_group.video_selected.connect(self._on_video_selected)

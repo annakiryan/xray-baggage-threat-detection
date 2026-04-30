@@ -40,7 +40,9 @@ class SessionHistoryService:
                 HistorySessionData(
                     session_dir=session_dir,
                     summary_path=summary_path if summary_path.exists() else None,
-                    title=SessionHistoryService.make_session_title(session_dir, summary),
+                    title=SessionHistoryService.make_session_title(
+                        session_dir, summary
+                    ),
                     class_counts=summary.get("class_counts", {}),
                     detection_images=SessionHistoryService.collect_detection_images(
                         summary=summary,

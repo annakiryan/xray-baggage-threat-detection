@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
         self.interface_settings = interface_settings
         self.theme_manager = theme_manager
 
-        self.setWindowTitle("Детекция запрещённых предметов")
+        self.setWindowTitle(" ")
 
         self._build_ui()
         self._connect_signals()

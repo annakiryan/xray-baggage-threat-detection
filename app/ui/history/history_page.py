@@ -15,8 +15,12 @@ from PySide6.QtWidgets import (
 )
 
 from app.ui.history.widgets import SessionsPanel, HistoryViewerPanel, StatsPanel
-from app.session.session_history_service import HistorySessionData, SessionHistoryService
+from app.session.session_history_service import (
+    HistorySessionData,
+    SessionHistoryService,
+)
 from app.ui.styles import SESSION_HISTORY_STYLE
+
 
 class HistoryPage(QWidget):
     def __init__(self, results_dir: str):
