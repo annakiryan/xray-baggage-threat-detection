@@ -177,4 +177,3 @@ dist/XRayDetector/XRayDetector.exe
 Готовую собранную версию приложения можно скачать по ссылке:
 
 [Скачать XRayDetector с Google Диска](https://drive.google.com/file/d/17KWrq3jeXJZJ1ZFCVMilCSoVxIl8hYR4/view?usp=sharing)
->>>>>>> 8f2f5a14692d1a00b0d752f927e34534e63f4d12
