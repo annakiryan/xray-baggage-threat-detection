@@ -3,6 +3,7 @@ from json import JSONDecodeError
 import json
 from pathlib import Path
 from typing import Any
+import shutil
 
 
 @dataclass(frozen=True)
@@ -122,3 +123,86 @@ class SessionHistoryService:
         ]
         images.sort(key=lambda p: p.name.lower())
         return images
+    
+    @staticmethod
+    def delete_sessions(session_dirs: list[Path]) -> None:
+        for session_dir in session_dirs:
+            path = Path(session_dir)
+
+            if path.exists() and path.is_dir():
+                shutil.rmtree(path)
+
+    @staticmethod
+    def delete_images_from_session(
+        session: HistorySessionData,
+        image_paths: list[Path],
+    ) -> None:
+        resolved_deleted = set()
+
+        for image_path in image_paths:
+            path = Path(image_path)
+
+            try:
+                resolved = path.resolve()
+            except OSError:
+                continue
+
+            if resolved.exists() and resolved.is_file():
+                resolved.unlink()
+                resolved_deleted.add(resolved)
+
+        if session.summary_path is None or not session.summary_path.exists():
+            return
+
+        summary = SessionHistoryService.read_summary(session.summary_path)
+        events = summary.get("events", [])
+
+        if not isinstance(events, list):
+            return
+
+        updated_events = []
+
+        for event in events:
+            image_path = event.get("image_path")
+
+            if not image_path:
+                updated_events.append(event)
+                continue
+
+            try:
+                resolved_event_path = Path(image_path).resolve()
+            except OSError:
+                updated_events.append(event)
+                continue
+
+            if resolved_event_path not in resolved_deleted:
+                updated_events.append(event)
+
+        summary["events"] = updated_events
+        summary["total_detection_events"] = len(updated_events)
+        summary["class_counts"] = SessionHistoryService._make_class_counts(
+            updated_events
+        )
+
+        with session.summary_path.open("w", encoding="utf-8") as file:
+            json.dump(
+                summary,
+                file,
+                ensure_ascii=False,
+                indent=2,
+            )
+
+    @staticmethod
+    def _make_class_counts(events: list[dict[str, Any]]) -> dict[str, int]:
+        class_counts: dict[str, int] = {}
+
+        for event in events:
+            class_names = event.get("class_names", [])
+
+            if not isinstance(class_names, list):
+                continue
+
+            for class_name in class_names:
+                class_counts[class_name] = class_counts.get(class_name, 0) + 1
+
+        return class_counts

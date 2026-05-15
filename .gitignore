@@ -1,4 +1,5 @@
-venv/
+.venv/
+.venv_build
 __pycache__/
 *.pyc
 *.pyo
@@ -11,4 +12,4 @@ logs/*.log
 *.bak
 .DS_Store
 Thumbs.db
-results/
+data/results/

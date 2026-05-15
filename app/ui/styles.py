@@ -268,7 +268,7 @@ QPushButton#themeCard,
 QPushButton#colorCard,
 QPushButton#thicknessButton {{
     background-color: {bg_inner};
-    border: 1px solid #3A404A;
+    border: 1px solid {border};
     border-radius: 10px;
     padding: 0px;
 }}
@@ -685,4 +685,23 @@ QLabel#fullscreenImageLabel {{
     background-color: transparent;
     border: none;
 }}
+
+QMenu {{
+    background-color: {bg_inner};
+    color: {text};
+    border: 1px solid {border};
+    border-radius: 10px;
+    padding: 6px;
+}}
+
+QMenu::item {{
+    padding: 8px 28px 8px 14px;
+    border-radius: 7px;
+}}
+
+QMenu::item:selected {{
+    background-color: {accent};
+    color: white;
+}}
+
 """

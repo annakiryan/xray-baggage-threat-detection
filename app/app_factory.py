@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+import sys
 
 from app.config.app.app_config_service import ConfigService
 from app.config.interface.interface_settings_service import InterfaceSettingsService
@@ -16,13 +17,23 @@ from app.domain.settings import (
 from app.config.interface.theme_manager import ThemeManager
 from app.video.video_library_service import VideoLibraryService
 
+
 if TYPE_CHECKING:
     from app.ui.main_window.main_window import MainWindow
 
 
-APP_CONFIG_PATH = Path("configs/app_config.json")
-INTERFACE_SETTINGS_PATH = Path("configs/interface_settings.json")
-THEME_PALETTES_PATH = Path("configs/theme_palettes.json")
+def get_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+
+    return Path(__file__).resolve().parents[1]
+
+
+BASE_DIR = get_base_dir()
+
+APP_CONFIG_PATH = BASE_DIR / "configs" / "app_config.json"
+INTERFACE_SETTINGS_PATH = BASE_DIR / "configs" / "interface_settings.json"
+THEME_PALETTES_PATH = BASE_DIR / "configs" / "theme_palettes.json"
 
 
 @dataclass(frozen=True)
@@ -39,10 +50,13 @@ class AppDependencies:
 def build_dependencies() -> AppDependencies:
     app_config = ConfigService.load_app_config(APP_CONFIG_PATH)
 
-    available_videos = VideoLibraryService.load_videos(app_config.videos_dir)
-    default_video_path = Path(app_config.videos_dir) / app_config.default_video
+    available_videos = VideoLibraryService.load_videos(
+        BASE_DIR / app_config.videos_dir
+    )
 
-    model_config_path = Path(app_config.models_dir) / app_config.model_config
+    default_video_path = BASE_DIR / app_config.videos_dir / app_config.default_video
+
+    model_config_path = BASE_DIR / app_config.models_dir / app_config.model_config
     model_config = ModelConfigService.load_model_config(model_config_path)
 
     interface_settings_service = InterfaceSettingsService(INTERFACE_SETTINGS_PATH)
@@ -74,8 +88,8 @@ def create_main_window(deps: AppDependencies | None = None) -> "MainWindow":
         model_config=dependencies.model_config,
         storage_settings=StorageSettings(
             default_video_path=dependencies.default_video_path,
-            logs_dir=dependencies.app_config.logs_dir,
-            results_dir=dependencies.app_config.results_dir,
+            logs_dir=BASE_DIR / dependencies.app_config.logs_dir,
+            results_dir=BASE_DIR / dependencies.app_config.results_dir,
         ),
         inference_settings=InferenceSettings(
             device=dependencies.app_config.device,

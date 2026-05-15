@@ -12,43 +12,43 @@
     "text_muted": "#8E99A8",
     "title": "#DDE5F0"
   },
-  "low_contrast": {
-    "name": "Мягкая тёмная",
-    "bg_main": "#23272E",
-    "bg_card": "#2A3038",
-    "bg_inner": "#252B33",
-    "border": "#343B45",
-    "accent": "#4A7DEB",
-    "accent_hover": "#5B8AF0",
-    "accent_pressed": "#3E69C9",
-    "text": "#E2E7EE",
-    "text_muted": "#A1ABB7",
-    "title": "#EEF2F7"
+  "monokai": {
+  "name": "Тёплая тёмная",
+  "bg_main": "#1E1E1E",
+  "bg_card": "#252526",
+  "bg_inner": "#2D2D30",
+  "border": "#3C3C3C",
+  "accent": "#4C8DFF",
+  "accent_hover": "#669DFF",
+  "accent_pressed": "#3C74D6",
+  "text": "#D4D4D4",
+  "text_muted": "#9DA5B4",
+  "title": "#F0F0F0"
   },
-  "warm": {
-    "name": "Тёплая",
-    "bg_main": "#2A2420",
-    "bg_card": "#332B26",
-    "bg_inner": "#241F1B",
-    "border": "#493A30",
-    "accent": "#C88A3D",
-    "accent_hover": "#D99A4A",
-    "accent_pressed": "#A97132",
-    "text": "#F0E7DC",
-    "text_muted": "#B9AA99",
-    "title": "#FFF0DF"
+"sand": {
+  "name": "Песочная",
+  "bg_main": "#F3EEDB",
+  "bg_card": "#FBF7EA",
+  "bg_inner": "#E9E1CC",
+  "border": "#D0C3A1",
+  "accent": "#B28A17",
+  "accent_hover": "#C39A24",
+  "accent_pressed": "#926F12",
+  "text": "#4B463B",
+  "text_muted": "#7A7467",
+  "title": "#2F2B22"
   },
-  "soft_green": {
-    "name": "Спокойная зелёная",
-    "bg_main": "#1F2825",
-    "bg_card": "#26332F",
-    "bg_inner": "#1A221F",
-    "border": "#31433D",
-    "accent": "#5FAF8E",
-    "accent_hover": "#70C09F",
-    "accent_pressed": "#4F9478",
-    "text": "#E4EFEA",
-    "text_muted": "#9FAFA8",
-    "title": "#F0FAF5"
+  "light": {
+  "name": "Светлая",
+  "bg_main": "#F4F6F8",
+  "bg_card": "#FFFFFF",
+  "bg_inner": "#EEF2F6",
+  "border": "#D7DEE8",
+  "accent": "#2F5F9E",
+  "accent_hover": "#3A6EAF",
+  "accent_pressed": "#244C82",
+  "text": "#26303D",
+  "text_muted": "#647184",
+  "title": "#182230"
   }
 }
