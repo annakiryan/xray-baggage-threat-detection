@@ -118,7 +118,7 @@ python -m venv .venv
 
 ### 4.2. Установка зависимостей
 
-Если в проекте есть файл `requirements.txt`, установите зависимости командой:
+Установите зависимости командой:
 
 ```bash
 pip install -r requirements.txt
