@@ -30,6 +30,8 @@
 
 ### Анализ
 
+![Страница анализа](docs/images/analysis_page.png)
+
 На странице анализа можно:
 
 - выбрать видеофайл для обработки;
@@ -41,6 +43,8 @@
 
 ### История
 
+![Страница истории](docs/images/history_page.png)
+
 На странице истории можно:
 
 - просматривать сохранённые сеансы анализа;
@@ -50,6 +54,8 @@
 - удалять выбранные сеансы или отдельные снимки.
 
 ### Настройки
+
+![Страница настроек](docs/images/settings_page.png)
 
 На странице настроек можно:
 
@@ -118,12 +124,6 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Если файла `requirements.txt` нет, можно установить основные зависимости вручную:
-
-```bash
-pip install PySide6 opencv-python onnxruntime numpy pillow qtawesome
-```
-
 ### 4.3. Запуск приложения
 
 После установки зависимостей запустите приложение командой:
@@ -176,4 +176,5 @@ dist/XRayDetector/XRayDetector.exe
 
 Готовую собранную версию приложения можно скачать по ссылке:
 
-[Скачать XRayDetector с Google Диска](ВСТАВИТЬ_ССЫЛКУ_НА_GOOGLE_DRIVE)
+[Скачать XRayDetector с Google Диска](https://drive.google.com/file/d/17KWrq3jeXJZJ1ZFCVMilCSoVxIl8hYR4/view?usp=sharing)
+>>>>>>> 8f2f5a14692d1a00b0d752f927e34534e63f4d12
