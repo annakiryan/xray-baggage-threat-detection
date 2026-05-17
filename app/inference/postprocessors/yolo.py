@@ -8,10 +8,6 @@ from app.domain.entities import Detection, ModelConfig
 
 
 class YoloPostprocessor(BasePostprocessor):
-    """
-    Постобработка YOLO-подобного выхода ONNX-модели.
-    """
-
     def __init__(self, model_config: ModelConfig):
         self.model_config = model_config
 
@@ -54,11 +50,9 @@ class YoloPostprocessor(BasePostprocessor):
                 f"Ожидался выход модели размерности 2 или 3, получено: shape={predictions.shape}"
             )
 
-        # Если это уже готовые детекции вида (N, 6), ничего не трогаем
         if predictions.shape[-1] == 6:
             return predictions
 
-        # Для классического YOLO ONNX часто приходит (C, N), а нужен (N, C)
         if predictions.shape[0] < predictions.shape[1]:
             predictions = predictions.T
 
@@ -80,7 +74,6 @@ class YoloPostprocessor(BasePostprocessor):
         for pred in predictions:
             values_count = pred.shape[0]
 
-            # Формат готовых детекций: x1, y1, x2, y2, score, class_id
             if values_count == 6:
                 x1, y1, x2, y2, confidence, class_id = pred[:6]
 
@@ -93,7 +86,6 @@ class YoloPostprocessor(BasePostprocessor):
                 if class_id < 0 or class_id >= num_classes:
                     continue
 
-                # Если был letterbox, нужно вернуть координаты в оригинальное изображение
                 if preprocess_meta is not None:
                     scale = preprocess_meta["scale"]
                     pad_left = preprocess_meta["pad_left"]
@@ -118,7 +110,6 @@ class YoloPostprocessor(BasePostprocessor):
                     )
                 )
 
-            # Формат: cx, cy, w, h, class_scores...
             elif values_count == 4 + num_classes:
                 cx, cy, w, h = pred[:4]
                 class_scores = pred[4:]
@@ -147,7 +138,6 @@ class YoloPostprocessor(BasePostprocessor):
                     )
                 )
 
-            # Формат: cx, cy, w, h, objectness, class_scores...
             elif values_count == 5 + num_classes:
                 cx, cy, w, h = pred[:4]
                 objectness = float(pred[4])
@@ -195,9 +185,6 @@ class YoloPostprocessor(BasePostprocessor):
         original_height: int,
         preprocess_meta: dict | None,
     ) -> tuple[int, int, int, int]:
-        """
-        Перевод bbox из координат letterbox-входа обратно в координаты исходного изображения.
-        """
         x1 = cx - w / 2.0
         y1 = cy - h / 2.0
         x2 = cx + w / 2.0
