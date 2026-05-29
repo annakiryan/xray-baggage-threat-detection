@@ -177,3 +177,8 @@ dist/XRayDetector/XRayDetector.exe
 Готовую собранную версию приложения можно скачать по ссылке:
 
 [Скачать XRayDetector с Google Диска](https://drive.google.com/file/d/17KWrq3jeXJZJ1ZFCVMilCSoVxIl8hYR4/view?usp=sharing)
+
+
+## 7. Набор данных
+
+Модели обучались [на этом наборе данных](https://www.kaggle.com/datasets/annnakiryan/x-ray-dataset-imgsize-1000x1000)
